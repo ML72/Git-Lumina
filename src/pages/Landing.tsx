@@ -140,7 +140,7 @@ const Landing: React.FC = () => {
           background: '#0d1117',
           position: 'relative',
           overflowX: 'hidden',
-          pt: 8,
+          pt: 4,
           pb: 8
         }}
       >
@@ -205,7 +205,7 @@ const Landing: React.FC = () => {
                 border: '1px solid rgba(235, 240, 244, 0.1)',
                 background: 'linear-gradient(90deg, rgba(88, 166, 255, 0.1) 0%, rgba(163, 113, 247, 0.1) 100%)',
                 boxShadow: '0 0 20px rgba(0,0,0,0.2)',
-                mb: 4,
+                mb: 3,
                 backdropFilter: 'blur(4px)'
               }}
             >
@@ -224,7 +224,7 @@ const Landing: React.FC = () => {
                 fontSize: { xs: '2.5rem', md: '4.5rem' },
                 letterSpacing: '-0.02em',
                 lineHeight: 1.1,
-                mb: 3,
+                mb: 2,
                 color: '#fff',
                 textShadow: '0 10px 30px rgba(0,0,0,0.5)',
               }}
@@ -240,7 +240,7 @@ const Landing: React.FC = () => {
               </Box>
             </Typography>
             
-            <Typography variant="h6" sx={{ color: '#8b949e', fontWeight: 400, maxWidth: '640px', mx: 'auto', lineHeight: 1.6, fontSize: '1.25rem', mb: 8 }}>
+            <Typography variant="h6" sx={{ color: '#8b949e', fontWeight: 400, maxWidth: '640px', mx: 'auto', lineHeight: 1.6, fontSize: '1.25rem', mb: 5 }}>
               Turn your complex repository into an interactive, glowing galaxy of code.
               Understand structure, dependencies, and flow in seconds.
             </Typography>
@@ -252,8 +252,7 @@ const Landing: React.FC = () => {
                 borderRadius: 4, 
                 overflow: 'visible', 
                 boxShadow: '0 50px 100px -20px rgba(0,0,0,0.7)',
-                bgcolor: alpha('#161b22', 0.8), 
-                backdropFilter: 'blur(12px)',
+                bgcolor: '#161b22', 
                 border: '1px solid rgba(255,255,255,0.08)',
                 p: 0,
                 maxWidth: '600px',
@@ -264,11 +263,12 @@ const Landing: React.FC = () => {
               {/* Card Glow Effect */}
               <Box sx={{
                   position: 'absolute',
-                  top: '-1px', left: '-1px', right: '-1px', bottom: '-1px',
+                  top: '-2px', left: '-2px', right: '-2px', bottom: '-2px',
                   borderRadius: 4,
                   zIndex: -1,
-                  background: 'linear-gradient(180deg, rgba(88, 166, 255, 0.4) 0%, rgba(163, 113, 247, 0.1) 50%, transparent 100%)',
-                  opacity: 0.6
+                  background: 'linear-gradient(180deg, rgba(88, 166, 255, 0.5) 0%, rgba(163, 113, 247, 0.2) 50%, transparent 100%)',
+                  opacity: 0.8,
+                  filter: 'blur(4px)'
               }} />
 
               <Box sx={{ p: 4 }}>
@@ -329,16 +329,21 @@ const Landing: React.FC = () => {
                   ) : (
                     <Box 
                       sx={{ 
-                        border: '2px dashed #30363d', 
-                        borderRadius: 2, 
-                        p: 3, 
+                        border: '2px dashed',
+                        borderColor: 'rgba(56, 139, 253, 0.3)', // Visible but subtle border
+                        borderRadius: 3, 
+                        p: 4, 
                         textAlign: 'center',
                         cursor: 'pointer',
-                        transition: 'all 0.2s',
-                        bgcolor: '#0d1117',
+                        transition: 'all 0.3s ease',
+                        bgcolor: '#0d1117', // Solid dark background as requested
+                        boxShadow: '0 4px 6px rgba(0, 0, 0, 0.3)', // Subtle shadow depth
+                        position: 'relative',
                         '&:hover': {
                           borderColor: '#a371f7',
-                          bgcolor: 'rgba(163, 113, 247, 0.04)'
+                          boxShadow: '0 0 20px rgba(163, 113, 247, 0.2), 0 0 40px rgba(163, 113, 247, 0.1) inset', // Glow on hover
+                          bgcolor: '#12161c',
+                          transform: 'translateY(-1px)'
                         }
                       }}
                       component="label"
@@ -546,11 +551,6 @@ const Landing: React.FC = () => {
 
           {/* Footer */}
           <Box sx={{ mt: 12, textAlign: 'center', borderTop: '1px solid #30363d', width: '100%', pt: 4 }}>
-            <Stack direction="row" spacing={3} justifyContent="center" sx={{ color: '#8b949e' }}>
-              <Typography variant="caption" sx={{ cursor: 'pointer', '&:hover': { color: '#a371f7' } }}>Privacy Policy</Typography>
-              <Typography variant="caption" sx={{ cursor: 'pointer', '&:hover': { color: '#a371f7' } }}>Terms of Service</Typography>
-              <Typography variant="caption" sx={{ cursor: 'pointer', '&:hover': { color: '#a371f7' } }}>Documentation</Typography>
-            </Stack>
             <Typography variant="caption" sx={{ display: 'block', mt: 2, color: '#484f58' }}>
               © 2026 Git Lumina. Open source analysis.
             </Typography>
