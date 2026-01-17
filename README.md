@@ -1,0 +1,37 @@
+# Template Code
+
+This is boilerplate code for a web application using the following frameworks:
+- **React** for user interface
+- **Material UI** for styling
+
+## Getting started
+
+1. Install dependencies in the project directory:
+
+    ```
+    npm install
+    ```
+
+2. Run the following to start the development server:
+
+    ```
+    npm run dev
+    ```
+
+3. Open a browser and go to `localhost:5173` to see the app!
+
+4. Type `Ctrl+C` or `q` in the terminal with the server to stop the server.
+
+## Updates
+
+If the dependencies in `package.json` are outdated, run the following to update them:
+
+```
+npm update
+```
+
+To fix vulnerabilities that might have appeared since the creation of this template, run the following:
+
+```
+npm audit fix --force
+```
