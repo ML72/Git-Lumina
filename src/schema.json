@@ -1,0 +1,180 @@
+{
+  "categories": ["Repository", "Directory", "File"],
+  "nodes": [
+    {
+      "filepath": "Git-Lumina",
+      "category": 0,
+      "functions": {},
+      "description": "Root repository",
+      "num_lines": 0,
+      "num_characters": 0,
+      "fileDependencies": []
+    },
+    {
+      "filepath": "src",
+      "category": 1,
+      "functions": {},
+      "description": "Source directory",
+      "num_lines": 0,
+      "num_characters": 0,
+      "fileDependencies": []
+    },
+    {
+      "filepath": "src/components",
+      "category": 1,
+      "functions": {},
+      "description": "UI Components",
+      "num_lines": 0,
+      "num_characters": 0,
+      "fileDependencies": []
+    },
+    {
+      "filepath": "src/pages",
+      "category": 1,
+      "functions": {},
+      "description": "Route pages",
+      "num_lines": 0,
+      "num_characters": 0,
+      "fileDependencies": []
+    },
+    {
+      "filepath": "src/service",
+      "category": 1,
+      "functions": {},
+      "description": "Business logic services",
+      "num_lines": 0,
+      "num_characters": 0,
+      "fileDependencies": []
+    },
+    {
+      "filepath": "src/store",
+      "category": 1,
+      "functions": {},
+      "description": "Redux store",
+      "num_lines": 0,
+      "num_characters": 0,
+      "fileDependencies": []
+    },
+    {
+      "filepath": "src/types",
+      "category": 1,
+      "functions": {},
+      "description": "Type definitions",
+      "num_lines": 0,
+      "num_characters": 0,
+      "fileDependencies": []
+    },
+    {
+      "filepath": "src/App.tsx",
+      "category": 2,
+      "functions": {
+        "App": { "line_start": 12, "line_count": 20 }
+      },
+      "description": "Main application entry point",
+      "num_lines": 50,
+      "num_characters": 1200,
+      "fileDependencies": []
+    },
+    {
+      "filepath": "src/main.tsx",
+      "category": 2,
+      "functions": {},
+      "description": "",
+      "num_lines": 20,
+      "num_characters": 400,
+      "fileDependencies": []
+    },
+    {
+      "filepath": "src/components/Alert.tsx",
+      "category": 2,
+      "functions": {},
+      "description": "Alert component",
+      "num_lines": 30,
+      "num_characters": 600,
+      "fileDependencies": []
+    },
+    {
+      "filepath": "src/components/CustomPage.tsx",
+      "category": 2,
+      "functions": {},
+      "description": "Layout wrapper",
+      "num_lines": 45,
+      "num_characters": 900,
+      "fileDependencies": []
+    },
+    {
+      "filepath": "src/components/GraphDisplay.tsx",
+      "category": 2,
+      "functions": {},
+      "description": "3D Force Graph Visualization",
+      "num_lines": 150,
+      "num_characters": 4000,
+      "fileDependencies": []
+    },
+    {
+      "filepath": "src/pages/Landing.tsx",
+      "category": 2,
+      "functions": {},
+      "description": "Landing page",
+      "num_lines": 60,
+      "num_characters": 1500,
+      "fileDependencies": []
+    },
+    {
+      "filepath": "src/pages/Results.tsx",
+      "category": 2,
+      "functions": {},
+      "description": "Results page",
+      "num_lines": 80,
+      "num_characters": 2000,
+      "fileDependencies": []
+    },
+    {
+      "filepath": "src/service/alert.ts",
+      "category": 2,
+      "functions": {
+        "setNewAlert": { "line_start": 5, "line_count": 10 }
+      },
+      "description": "Alert service",
+      "num_lines": 40,
+      "num_characters": 800,
+      "fileDependencies": []
+    },
+    {
+      "filepath": "src/store/store.ts",
+      "category": 2,
+      "functions": {},
+      "description": "Store configuration",
+      "num_lines": 25,
+      "num_characters": 500,
+      "fileDependencies": []
+    },
+    {
+      "filepath": "src/store/slices/ui.ts",
+      "category": 2,
+      "functions": {},
+      "description": "UI slice",
+      "num_lines": 35,
+      "num_characters": 700,
+      "fileDependencies": []
+    }
+  ],
+  "edges": [
+    [0, 1, 1.0], 
+    
+    [1, 2, 1.0], [1, 3, 1.0], [1, 4, 1.0], [1, 5, 1.0], [1, 6, 1.0],
+    [1, 7, 1.0], [1, 8, 1.0], 
+    
+    [2, 9, 1.0], [2, 10, 1.0], [2, 11, 1.0], 
+    
+    [3, 12, 1.0], [3, 13, 1.0], 
+    
+    [4, 14, 1.0], 
+    [5, 15, 1.0], [5, 16, 1.0],
+    
+    [7, 12, 0.5], [7, 13, 0.5], 
+    [12, 10, 0.5], 
+    [13, 10, 0.5], [13, 11, 0.5], [13, 14, 0.5],
+    [10, 9, 0.5] 
+  ]
+}
