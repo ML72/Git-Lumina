@@ -1,178 +1,130 @@
+import JSZip from 'jszip';
+import { CodebaseGraph } from '../types/CodebaseGraph';
+import { analyzeFile, getLanguageFromExtension } from './languageSyntax';
 
-import axios from "axios";
-import type { CodebaseGraph } from "../types/CodebaseGraph";
+export const constructGraphFromZip = async (zipFile: File): Promise<CodebaseGraph> => {
+    // 1. Unzip
+    console.log(`Unzipping ${zipFile.name}...`);
+    const zip = new JSZip();
+    const contents = await zip.loadAsync(zipFile);
 
-/**
- * Decodes base64 to UTF-8 string in a browser-friendly way.
- */
-export function base64ToUtf8(base64: string): string {
-  const cleaned = base64.replace(/\n/g, "");
-  if (typeof window !== "undefined" && window.atob) {
-    const binary = window.atob(cleaned);
-    const bytes = Uint8Array.from(binary, c => c.charCodeAt(0));
-    return new TextDecoder().decode(bytes);
-  }
-  return "";
-}
+    // 2. Process Files
+    const files: Array<{
+        path: string;
+        content: string;
+        fileName: string; // name without path
+        nameNoExt: string;
+    }> = [];
 
-/**
- * Fetches the GitHub repository info (to get default branch, etc).
- */
-export async function getRepoInfo(owner: string, repo: string, githubToken: string) {
-  const url = `https://api.github.com/repos/${owner}/${repo}`;
-  const headers = { Authorization: `token ${githubToken}` };
-  try {
-    const response = await axios.get(url, { headers });
-    return response.data;
-  } catch (error) {
-    throw new Error("Failed to fetch repo info: " + (error instanceof Error ? error.message : String(error)));
-  }
-}
+    // The zip usually contains a top-level folder "repo-branch"
+    // We want to normalize paths by stripping that root folder.
+    const rootFolder = Object.keys(contents.files)[0].split('/')[0] + '/';
 
-/**
- * Fetches the recursive file tree for a given repo and branch.
- */
-export async function getRepoTree(owner: string, repo: string, branch: string, githubToken: string) {
-  const url = `https://api.github.com/repos/${owner}/${repo}/git/trees/${branch}?recursive=1`;
-  const headers = { Authorization: `token ${githubToken}` };
-  try {
-    const response = await axios.get(url, { headers });
-    return response.data;
-  } catch (error) {
-    throw new Error("Failed to fetch repo tree: " + (error instanceof Error ? error.message : String(error)));
-  }
-}
+    for (const [relativePath, file] of Object.entries(contents.files)) {
+        if (file.dir) continue;
+        if (!relativePath.startsWith(rootFolder)) continue; 
+        
+        // Skip hidden files, images, etc. based on extension/name
+        const path = relativePath.slice(rootFolder.length);
+        if(!path) continue; // Root folder entry itself if technically not dir?
 
-/**
- * Parses code and extracts imported module names.
- * (This is a simple regex-based parser for import statements in code.)
- */
-export function getImports(codeContent: string): string[] {
-  const importRegex = /^\s*(?:from|import)\s+([a-zA-Z0-9_\.]+)/gm;
-  const imports: string[] = [];
-  let match: RegExpExecArray | null;
-  while ((match = importRegex.exec(codeContent)) !== null) {
-    if (match[1]) imports.push(match[1]);
-  }
-  return imports;
-}
+        const fileName = path.split('/').pop() || '';
+        if (fileName.startsWith('.') || fileName === 'package-lock.json' || fileName === 'yarn.lock') continue;
 
-/**
- * Resolves an import name to a file path in the repo (language-agnostic).
- * Tries to match the import/module name to any file in the repo by replacing dots with slashes and matching any extension.
- */
-export function resolvePath(importName: string, currentPath: string, allPaths: Set<string>): string | null {
-  // Try to match importName to any file path in the repo
-  const importPath = importName.replace(/\./g, "/");
-  // Check for any file that ends with the import path (with or without extension)
-  for (const path of allPaths) {
-    if (path.endsWith(importPath) || path.endsWith(importPath + ".js") || path.endsWith(importPath + ".ts") || path.endsWith(importPath + ".jsx") || path.endsWith(importPath + ".tsx") || path.endsWith(importPath + ".py")) {
-      return path;
-    }
-  }
-  // Try relative: <currentDir>/<importPath>
-  const currentDir = currentPath.substring(0, currentPath.lastIndexOf("/"));
-  const relativePath = currentDir ? `${currentDir}/${importPath}` : importPath;
-  for (const path of allPaths) {
-    if (path.endsWith(relativePath) || path.endsWith(relativePath + ".js") || path.endsWith(relativePath + ".ts") || path.endsWith(relativePath + ".jsx") || path.endsWith(relativePath + ".tsx") || path.endsWith(relativePath + ".py")) {
-      return path;
-    }
-  }
-  return null;
-}
-
-/**
- * Constructs a graph of nodes and links from a GitHub repo's code files (language-agnostic).
- */
-export async function constructGraph(owner: string, repo: string, githubToken: string): Promise<CodebaseGraph> {
-  // 1. Get repo info for default branch
-  const repoInfo = await getRepoInfo(owner, repo, githubToken);
-  const branch = repoInfo.default_branch || "main";
-
-  // 2. Get the file tree
-  const treeData = await getRepoTree(owner, repo, branch, githubToken);
-  const tree = treeData.tree || [];
-
-  // 3. Filter for code files (js, ts, jsx, tsx, py, java, cpp, c, cs, go, rb, php, etc.)
-  const codeExtensions = [
-    ".js", ".ts", ".jsx", ".tsx", ".py", ".java", ".cpp", ".c", ".cs", ".go", ".rb", ".php", ".swift", ".kt", ".rs", ".m", ".scala", ".pl", ".sh", ".dart", ".lua"
-  ];
-  const allPaths: string[] = tree
-    .filter((item: any) => codeExtensions.some((ext: string) => item.path.toLowerCase().endsWith(ext)))
-    .map((item: any) => String(item.path));
-  const allPathsSet: Set<string> = new Set<string>(allPaths);
-
-  // 4. Categories (stub: by extension)
-  const extToCategory: Record<string, number> = {};
-  const categories: string[] = [];
-  allPaths.forEach((path: string) => {
-    const ext = path.slice(path.lastIndexOf('.'));
-    if (!(ext in extToCategory)) {
-      extToCategory[ext] = categories.length;
-      categories.push(ext);
-    }
-  });
-
-  // 5. Build nodes with required fields
-  const nodes = await Promise.all(allPaths.map(async (path: string) => {
-    // Find the tree item for this path
-    const item = tree.find((i: any) => i.path === path);
-    let functions: Record<string, { line_start: number, line_count: number }> = {};
-    let content = "";
-    if (item) {
-      try {
-        const blobUrl = `https://api.github.com/repos/${owner}/${repo}/git/blobs/${item.sha}`;
-        const headers = githubToken ? { Authorization: `token ${githubToken}` } : {};
-        const blobRes = await axios.get(blobUrl, { headers });
-        content = base64ToUtf8(blobRes.data.content);
-        // Simple function extraction (stub: match 'function name(' or 'def name(')
-        const funcRegex = /(?:function|def)\s+([a-zA-Z0-9_]+)\s*\(.*\)\s*[{:]?/g;
-        let match: RegExpExecArray | null;
-        let lines = content.split('\n');
-        while ((match = funcRegex.exec(content)) !== null) {
-          const name = match[1];
-          // Find line number
-          const before = content.slice(0, match.index);
-          const line_start = before.split('\n').length;
-          // For demo, just set line_count = 1
-          functions[name] = { line_start, line_count: 1 };
+        const ext = fileName.split('.').pop()?.toLowerCase();
+        // Allow-list for text/code files
+        const allowedExts = ['js', 'jsx', 'ts', 'tsx', 'py', 'java', 'c', 'cpp', 'h', 'hpp', 'json', 'md', 'css', 'html', 'go', 'rs'];
+        if (ext && allowedExts.includes(ext)) {
+            const content = await file.async('string');
+            files.push({
+                path,
+                content,
+                fileName,
+                nameNoExt: fileName.replace(/\.[^/.]+$/, "") 
+            });
         }
-      } catch (e) {}
     }
-    const ext = path.slice(path.lastIndexOf('.'));
+
+    // 3. Construct Nodes
+    const nodes = files.map((f, index) => {
+        const analysis = analyzeFile(f.content, f.path);
+        
+        // We'll store analysis in a temp way if needed, but here we just need functions on the node
+        return {
+            id: index, // Temp ID for edge construction
+            filepath: f.path,
+            num_lines: f.content.split('\n').length,
+            num_characters: f.content.length,
+            category: 0, // Default category index
+            functions: analysis.functions,
+            description: "",
+            imports: analysis.imports, // Keep for edge calc
+            content: f.content,
+            nameNoExt: f.nameNoExt
+        };
+    });
+
+    // 4. Construct Edges
+    const edges: [number, number, number][] = [];
+
+    // O(N^2) rough matching
+    for (let i = 0; i < nodes.length; i++) {
+        const nodeA = nodes[i];
+        
+        // Pre-compute normalized imports for A
+        const importsA = nodeA.imports.map(imp => {
+            // imp might be "react", "./utils/helper", "numpy"
+            // Normalize relative paths? Too complex for this snippet.
+            // Just matching basename
+            const part = imp.split('/').pop();
+            return part ? part.replace(/\.[^/.]+$/, "") : "";
+        });
+
+        for (let j = 0; j < nodes.length; j++) {
+            if (i === j) continue;
+            const nodeB = nodes[j];
+            
+            let weight = 0;
+            
+            // 1. Check strict imports (fuzzy match filename against import list)
+            if (importsA.includes(nodeB.nameNoExt)) {
+                weight += 5; // High weight for direct import match
+            }
+
+            // 2. Check content references (mention of class name or file name)
+            // Simple string search - careful of false positives but okay for visualizer
+            // Regex for whole word to avoid "us" matching "user"
+            const nameRegex = new RegExp(`\\b${escapeRegExp(nodeB.nameNoExt)}\\b`, 'g');
+            const matches = (nodeA.content.match(nameRegex) || []).length;
+            
+            if (matches > 0) {
+               weight += matches;
+            }
+
+            if (weight > 0) {
+                // Logarithmic scaling as requested
+                // matches can be large, so log helps
+                const finalWeight = Math.log(weight + 1);
+                // Ensure reasonable precision
+                edges.push([i, j, Number(finalWeight.toFixed(2))]);
+            }
+        }
+    }
+
     return {
-      filepath: path,
-      github_url: `https://github.com/${owner}/${repo}/blob/${branch}/${path}`,
-      category: extToCategory[ext],
-      functions,
-      description: ""
+        categories: ["General"],
+        nodes: nodes.map(({ filepath, num_lines, num_characters, category, functions, description }) => ({
+            filepath,
+            num_lines,
+            num_characters,
+            category,
+            functions,
+            description
+        })),
+        edges
     };
-  }));
+};
 
-  // 6. Build edges as [fromIndex, toIndex, weight]
-  const edges: [number, number, number][] = [];
-  for (let i = 0; i < allPaths.length; ++i) {
-    const path: string = allPaths[i];
-    const item = tree.find((it: any) => it.path === path);
-    if (!item) continue;
-    try {
-      const blobUrl = `https://api.github.com/repos/${owner}/${repo}/git/blobs/${item.sha}`;
-      const headers = githubToken ? { Authorization: `token ${githubToken}` } : {};
-      const blobRes = await axios.get(blobUrl, { headers });
-      const content = base64ToUtf8(blobRes.data.content);
-      const imports = getImports(content);
-      for (const imp of imports) {
-        const targetPath = resolvePath(imp, path, allPathsSet);
-        if (targetPath) {
-          const j = allPaths.indexOf(targetPath);
-          if (j !== -1) {
-            // Weight stub: 1.0 for now
-            edges.push([i, j, 1.0]);
-          }
-        }
-      }
-    } catch (e) {}
-  }
-
-  return { categories, nodes, edges };
+function escapeRegExp(string: string) {
+  return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }

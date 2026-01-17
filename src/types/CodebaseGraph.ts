@@ -4,7 +4,8 @@ export interface CodebaseGraph {
   categories: string[];
   nodes: Array<{
     filepath: string;
-    github_url: string;
+    num_lines: number;
+    num_characters: number;
     category: number;
     functions: Record<string, { line_start: number; line_count: number }>;
     description: string;
