@@ -26,6 +26,7 @@ import {
 } from '@mui/icons-material';
 import CustomPage from '../components/CustomPage';
 import GraphDisplay from '../components/GraphDisplay';
+import WebcamStream from '../components/Webcam';
 
 // Mock Data
 const MOCK_CHAT = [
@@ -190,6 +191,7 @@ const Results: React.FC = () => {
         {/* Right Panel - Graph Display */}
         <Box sx={{ flex: 1, position: 'relative', height: '100%' }}>
           <GraphDisplay />
+          <WebcamStream />
           
           {/* Floating Controls Example (Like Google Maps) */}
           <Box sx={{ position: 'absolute', top: 20, right: 20, zIndex: 100 }}>

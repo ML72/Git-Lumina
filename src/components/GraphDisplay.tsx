@@ -2,6 +2,8 @@ import React, { useCallback, useRef, useState, useEffect, useMemo } from 'react'
 import { Box, Typography, Paper } from '@mui/material';
 import ForceGraph3D from 'react-force-graph-3d';
 import * as THREE from 'three';
+import { useSelector } from 'react-redux';
+import { selectControlState } from '../store/slices/control';
 // @ts-ignore
 import schema from '../schema.json';
 
@@ -13,6 +15,69 @@ const GraphDisplay: React.FC = () => {
   const [graphData, setGraphData] = useState<{nodes: any[], links: any[]}>({ nodes: [], links: [] });
   // Track expanded nodes to prevent duplicate expansion logic
   const [expandedNodes, setExpandedNodes] = useState<Set<string>>(new Set());
+
+  // --- Hand Tracking Integration ---
+  const controlState = useSelector(selectControlState);
+  const { isUserActive, wingspan, rotationControl, cursorControl } = controlState;
+
+  // Refs for Animation Loop to avoid stale closures
+  const stateRef = useRef({ controlState, graphData, expandedNodes });
+  useEffect(() => {
+     stateRef.current = { controlState, graphData, expandedNodes };
+  }, [controlState, graphData, expandedNodes]);
+
+  // Camera Rotation Loop
+  useEffect(() => {
+     let frameId: number;
+     const animate = () => {
+         const { isUserActive, wingspan, rotationControl } = stateRef.current.controlState;
+         
+         if (isUserActive && fgRef.current) {
+            const deadzone = 0.05; 
+            const sensitivity = 0.02;
+
+            // Normalized Velocity
+            // Input is Delta from Shoulder.
+            // Normalize by Wingspan.
+            let dx = rotationControl.x / (wingspan || 1);
+            let dy = rotationControl.y / (wingspan || 1);
+            let dz = rotationControl.z / (wingspan || 1);
+
+            if (Math.abs(dx) < deadzone) dx = 0;
+            if (Math.abs(dy) < deadzone) dy = 0;
+            if (Math.abs(dz) < deadzone) dz = 0;
+
+            if (dx !== 0 || dy !== 0 || dz !== 0) {
+                const camPos = fgRef.current.cameraPosition();
+                const dist = Math.sqrt(camPos.x**2 + camPos.y**2 + camPos.z**2);
+                let theta = Math.atan2(camPos.x, camPos.z);
+                let phi = Math.acos(camPos.y / dist);
+
+                // Yaw (Horizontal) - Left/Right
+                theta += dx * sensitivity * 10; 
+                
+                // Pitch (Vertical) - Up/Down
+                phi -= dy * sensitivity * 10;
+                phi = Math.max(0.1, Math.min(Math.PI - 0.1, phi)); // Clamp
+
+                // Zoom - Fwd/Back
+                // Hand Fwd (negative z in webcam usually means closer? or further?)
+                // Standard MediaPipe Z: Origin at hips/torso. Negative is forward (camera). 
+                // Let's assume dz < 0 is "Pushing forward" -> Zoom In.
+                let newDist = dist + (dz * sensitivity * 1000); 
+
+                const newX = newDist * Math.sin(phi) * Math.sin(theta);
+                const newY = newDist * Math.cos(phi);
+                const newZ = newDist * Math.sin(phi) * Math.cos(theta);
+
+                fgRef.current.cameraPosition({ x: newX, y: newY, z: newZ }, { x: 0, y: 0, z: 0 }, 10); 
+            }
+         }
+         frameId = requestAnimationFrame(animate);
+     };
+     animate();
+     return () => cancelAnimationFrame(frameId);
+  }, []); // Run once, depend on Ref
 
   useEffect(() => {
     setIsClient(true);
@@ -124,6 +189,46 @@ const GraphDisplay: React.FC = () => {
 
   }, [expandedNodes]);
 
+  // Click Interaction (Event Driven)
+  // MOVED HERE TO FIX REFERENCE ERROR
+  useEffect(() => {
+      if (!isUserActive || !cursorControl.isClicking) return;
+      
+      const { graphData: currentGraphData } = stateRef.current;
+      if (!fgRef.current || !currentGraphData.nodes.length) return;
+
+      // Find node closest to cursor
+      let closestNode: any = null;
+      let minScreenDist = 50; // px radius
+
+      // We need window dimensions. Assuming full screen or catching via ref?
+      // ForceGraph usually fills container.
+      const width = window.innerWidth; 
+      const height = window.innerHeight;
+
+      const cursorScreenX = cursorControl.x * width;
+      const cursorScreenY = cursorControl.y * height;
+
+      currentGraphData.nodes.forEach((node: any) => {
+          if (node.x === undefined || node.y === undefined) return;
+          const coords = fgRef.current.graph2ScreenCoords(node.x, node.y, node.z);
+          // Check if coords are valid (not behind camera)
+          if (coords.x === 0 && coords.y === 0) return; 
+
+          const dx = coords.x - cursorScreenX;
+          const dy = coords.y - cursorScreenY;
+          const d = Math.sqrt(dx*dx + dy*dy);
+          if (d < minScreenDist) {
+               minScreenDist = d;
+               closestNode = node;
+          }
+      });
+
+      if (closestNode) {
+          handleNodeClick(closestNode);
+      }
+  }, [cursorControl.isClicking, isUserActive, handleNodeClick]);
+
 
   // Text Sprite
   const createTextSprite = (text: string, size: number, color: string = '#ffffff') => {
@@ -159,7 +264,23 @@ const GraphDisplay: React.FC = () => {
   if (!isClient) return null;
 
   return (
-    <Box sx={{ width: '100%', height: '600px', position: 'relative' }}>
+    <Box sx={{ width: '100%', height: '100%', position: 'relative' }}>
+        {isUserActive && (
+             <div style={{
+                position: 'absolute',
+                left: `${cursorControl.x * 100}%`,
+                top: `${cursorControl.y * 100}%`,
+                width: 30,
+                height: 30,
+                border: `3px solid ${cursorControl.isClicking ? '#ff4081' : '#00e676'}`,
+                borderRadius: '50%',
+                transform: 'translate(-50%, -50%)',
+                pointerEvents: 'none',
+                zIndex: 9999,
+                boxShadow: `0 0 15px ${cursorControl.isClicking ? '#ff4081' : '#00e676'}`,
+                transition: 'border-color 0.2s, box-shadow 0.2s'
+             }} />
+        )}
         <Paper 
             elevation={3}
             sx={{ 

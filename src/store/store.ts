@@ -14,10 +14,12 @@ import {
 
 import { uiSlice } from "./slices/ui";
 import { graphSlice } from "./slices/graph";
+import { controlSlice } from "./slices/control";
 
 const combinedReducer = combineReducers({
     [uiSlice.name]: uiSlice.reducer,
-    [graphSlice.name]: graphSlice.reducer
+    [graphSlice.name]: graphSlice.reducer,
+    [controlSlice.name]: controlSlice.reducer
 });
 
 const persistConfig = {
