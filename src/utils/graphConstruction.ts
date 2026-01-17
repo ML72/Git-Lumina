@@ -66,6 +66,7 @@ export const constructGraphFromZip = async (zipFile: File): Promise<CodebaseGrap
 
     // 4. Construct Edges
     const edges: [number, number, number][] = [];
+    const dependencies: string[][] = nodes.map(() => []);
 
     // O(N^2) rough matching
     for (let i = 0; i < nodes.length; i++) {
@@ -107,19 +108,21 @@ export const constructGraphFromZip = async (zipFile: File): Promise<CodebaseGrap
                 const finalWeight = Math.log(weight + 1);
                 // Ensure reasonable precision
                 edges.push([i, j, Number(finalWeight.toFixed(2))]);
+                dependencies[i].push(nodeB.filepath);
             }
         }
     }
 
     return {
         categories: ["General"],
-        nodes: nodes.map(({ filepath, num_lines, num_characters, category, functions, description }) => ({
+        nodes: nodes.map(({ filepath, num_lines, num_characters, category, functions, description }, index) => ({
             filepath,
             num_lines,
             num_characters,
             category,
             functions,
-            description
+            description,
+            fileDependencies: dependencies[index]
         })),
         edges
     };
