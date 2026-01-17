@@ -36,11 +36,7 @@ import {
 } from '@mui/icons-material';
 import CustomPage from '../components/CustomPage';
 
-type InputType = 'git' | 'upload';
-
 const Landing: React.FC = () => {
-  const [inputType, setInputType] = useState<InputType>('git');
-  const [repoUrl, setRepoUrl] = useState('');
   const [apiKey, setApiKey] = useState('');
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [fileName, setFileName] = useState<string | null>(null);
@@ -52,9 +48,6 @@ const Landing: React.FC = () => {
   const [includeTests, setIncludeTests] = useState(false);
   const [fileExtensions, setFileExtensions] = useState('ts,tsx,js,jsx,py,java,cpp,h');
 
-  const handleInputTypeChange = (event: SelectChangeEvent<InputType>) => {
-    setInputType(event.target.value as InputType);
-  };
 
   const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files && event.target.files[0];
@@ -65,8 +58,7 @@ const Landing: React.FC = () => {
 
   const handleStartAnalysis = () => {
     console.log('Starting analysis with:', {
-      type: inputType,
-      source: inputType === 'git' ? repoUrl : fileName,
+      source: fileName,
       apiKey,
       settings: { is3D, includeTests, fileExtensions }
     });
@@ -274,60 +266,8 @@ const Landing: React.FC = () => {
               <Box sx={{ p: 4 }}>
                 <Stack spacing={3}>
                   
-                  {/* Input Method Selector */}
-                  <FormControl fullWidth variant="outlined" size="small">
-                    <Select
-                      value={inputType}
-                      onChange={handleInputTypeChange}
-                      sx={{ 
-                        '& .MuiOutlinedInput-notchedOutline': { borderColor: '#30363d' },
-                        '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: '#8b949e' },
-                        '&.Mui-focused .MuiOutlinedInput-notchedOutline': { borderColor: '#a371f7' }, // Purple focus
-                        color: '#fff',
-                        bgcolor: '#0d1117'
-                      }}
-                    >
-                      <MenuItem value="git">
-                        <Stack direction="row" alignItems="center" spacing={1}>
-                          <GitHubIcon fontSize="small" />
-                          <Typography>Git Repository</Typography>
-                        </Stack>
-                      </MenuItem>
-                      <MenuItem value="upload">
-                        <Stack direction="row" alignItems="center" spacing={1}>
-                          <CloudUploadIcon fontSize="small" />
-                          <Typography>Upload Archive (.zip)</Typography>
-                        </Stack>
-                      </MenuItem>
-                    </Select>
-                  </FormControl>
-
-                  {/* Conditional Input based on selection */}
-                  {inputType === 'git' ? (
-                    <TextField 
-                      fullWidth 
-                      placeholder="https://github.com/username/repo" 
-                      variant="outlined" 
-                      value={repoUrl}
-                      onChange={(e) => setRepoUrl(e.target.value)}
-                      InputProps={{
-                        startAdornment: (
-                          <InputAdornment position="start">
-                            <SearchIcon sx={{ color: '#8b949e' }} />
-                          </InputAdornment>
-                        ),
-                        sx: { 
-                          bgcolor: '#0d1117',
-                          borderRadius: 2,
-                          '& fieldset': { borderColor: '#30363d' },
-                          '&:hover fieldset': { borderColor: '#8b949e' },
-                          '&.Mui-focused fieldset': { borderColor: '#a371f7' }, // Purple focus
-                          input: { color: '#fff' }
-                        }
-                      }}
-                    />
-                  ) : (
-                    <Box 
+                  {/* File Upload Input */}
+                  <Box 
                       sx={{ 
                         border: '2px dashed',
                         borderColor: 'rgba(56, 139, 253, 0.3)', // Visible but subtle border
@@ -357,7 +297,7 @@ const Landing: React.FC = () => {
                       />
                       <CloudUploadIcon sx={{ fontSize: 32, color: '#8b949e', mb: 1 }} />
                       <Typography variant="body2" sx={{ color: '#fff' }}>
-                        {fileName ? fileName : "Upload codebase file"}
+                        {fileName ? fileName : "Upload codebase (.zip)"}
                       </Typography>
                       {fileName && (
                         <Chip 
@@ -367,7 +307,6 @@ const Landing: React.FC = () => {
                         />
                       )}
                     </Box>
-                  )}
 
                   <Box>
                     <Typography variant="caption" sx={{ mb: 1, color: '#d0d7de', display: 'block', fontWeight: 600 }}>
