@@ -119,12 +119,15 @@ export async function constructGraph(owner: string, repo: string, githubToken: s
     const item = tree.find((i: any) => i.path === path);
     let functions: Record<string, { line_start: number, line_count: number }> = {};
     let content = "";
+    let size: number | undefined = undefined;
+    let dependsOn: string[] | undefined = undefined;
     if (item) {
       try {
         const blobUrl = `https://api.github.com/repos/${owner}/${repo}/git/blobs/${item.sha}`;
         const headers = githubToken ? { Authorization: `token ${githubToken}` } : {};
         const blobRes = await axios.get(blobUrl, { headers });
         content = base64ToUtf8(blobRes.data.content);
+        size = content ? content.split('\n').length : undefined;
         // Simple function extraction (stub: match 'function name(' or 'def name(')
         const funcRegex = /(?:function|def)\s+([a-zA-Z0-9_]+)\s*\(.*\)\s*[{:]?/g;
         let match: RegExpExecArray | null;
@@ -137,6 +140,14 @@ export async function constructGraph(owner: string, repo: string, githubToken: s
           // For demo, just set line_count = 1
           functions[name] = { line_start, line_count: 1 };
         }
+        // Dependency directions: what this file depends on
+        const imports = getImports(content);
+        const resolvedDeps = imports
+          .map(imp => resolvePath(imp, path, allPathsSet))
+          .filter((depPath): depPath is string => !!depPath);
+        if (resolvedDeps.length > 0) {
+          dependsOn = resolvedDeps;
+        }
       } catch (e) {}
     }
     const ext = path.slice(path.lastIndexOf('.'));
@@ -145,7 +156,9 @@ export async function constructGraph(owner: string, repo: string, githubToken: s
       github_url: `https://github.com/${owner}/${repo}/blob/${branch}/${path}`,
       category: extToCategory[ext],
       functions,
-      description: ""
+      description: "",
+      ...(size !== undefined ? { size } : {}),
+      ...(dependsOn !== undefined ? { dependsOn } : {})
     };
   }));
 
