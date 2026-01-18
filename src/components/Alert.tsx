@@ -14,49 +14,40 @@ const Alert: React.FC<ComponentProps> = (props: ComponentProps) => {
 
   return (
     <Fragment>
-      <Stack spacing={3} sx={{ maxWidth: "100%" }}>
+      <Stack 
+        spacing={2} 
+        sx={isMobile 
+          ? { 
+              position: 'fixed', 
+              bottom: 0, 
+              left: 0, 
+              right: 0,
+              zIndex: 2000,
+              p: 2
+            }
+          : { 
+              position: 'fixed', 
+              bottom: 24, 
+              right: 24,
+              zIndex: 2000,
+              maxWidth: 400
+            }
+        }
+      >
         {
           alerts.map((alert: any, index: number) => (
-            <Snackbar
-              open={true}
-              key={alert.id || index}
-              transitionDuration={300}
-              sx={isMobile 
-                ? { 
-                    position: 'fixed !important', 
-                    bottom: '0 !important', 
-                    left: '0 !important', 
-                    right: '0 !important',
-                    transform: 'none !important' 
-                  }
-                : { 
-                    position: 'fixed !important', 
-                    bottom: '24px !important', 
-                    right: '24px !important',
-                    left: 'auto !important'
-                  }
-              }
-              anchorOrigin={{ 
-                vertical: 'bottom', 
-                horizontal: isMobile ? 'center' : 'right' 
-              }}
-            >
-              <MUIAlert 
+            <MUIAlert 
+                key={alert.id || index}
                 severity={alert.alertType} 
                 sx={{ 
                   width: '100%',
-                  ...(isMobile && {
-                    width: '100vw',
-                    borderRadius: 0,
-                    boxSizing: 'border-box'
-                  })
+                  boxShadow: 3
                  }}
                  elevation={6}
                  variant="filled"
-              >
-                {alert.msg}
-              </MUIAlert>
-            </Snackbar>
+            >
+              {alert.msg}
+            </MUIAlert>
           ))
         }
       </Stack>
