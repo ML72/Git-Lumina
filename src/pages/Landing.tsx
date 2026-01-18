@@ -54,9 +54,9 @@ const Landing: React.FC = () => {
   const navigate = useNavigate();
   
   // Advanced settings state
-  const [is3D, setIs3D] = useState(false);
-  const [includeTests, setIncludeTests] = useState(false);
-  const [fileExtensions, setFileExtensions] = useState('ts,tsx,js,jsx,py,java,cpp,h');
+  const [fileExtensions, setFileExtensions] = useState('ts,tsx,js,jsx,py,java,cpp,h,json,md,css,html,yaml,txt,go,rs,php,rb');
+  const [excludePaths, setExcludePaths] = useState<string[]>(['node_modules', 'dist', 'build', '.git', 'coverage']);
+  const [newExcludePath, setNewExcludePath] = useState('');
 
   // New state for GitHub integration
   const [uploadMode, setUploadMode] = useState<'upload' | 'github'>('upload');
@@ -161,7 +161,11 @@ const Landing: React.FC = () => {
 
         // 4. Generate Graph & Store & Navigate
         if (fileToProcess) {
-             await generateAndStoreGraph(fileToProcess, dispatch, navigate, apiKey);
+             const options = {
+                allowedExtensions: fileExtensions.split(',').map(e => e.trim()).filter(e => e),
+                excludePaths
+             };
+             await generateAndStoreGraph(fileToProcess, dispatch, navigate, apiKey, options);
              // generateAndStoreGraph handles dispatching setGraph, setName and navigating
              // It also handles errors for graph generation
         }
@@ -521,40 +525,9 @@ const Landing: React.FC = () => {
                         }}
                       >
                         <Stack spacing={2}>
-                          <Stack direction="row" spacing={4}>
-                             <FormControlLabel
-                               control={
-                                 <Switch 
-                                   size="small"
-                                   checked={is3D} 
-                                   onChange={(e) => setIs3D(e.target.checked)} 
-                                   sx={{
-                                     '& .MuiSwitch-switchBase.Mui-checked': { color: '#a371f7' },
-                                     '& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track': { backgroundColor: '#a371f7' }
-                                   }}
-                                 />
-                               }
-                               label={<Typography variant="body2" sx={{ color: '#fff' }}>Enable 3D</Typography>}
-                             />
-                             <FormControlLabel
-                               control={
-                                 <Switch 
-                                   size="small"
-                                   checked={includeTests} 
-                                   onChange={(e) => setIncludeTests(e.target.checked)}
-                                   sx={{
-                                     '& .MuiSwitch-switchBase.Mui-checked': { color: '#a371f7' },
-                                     '& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track': { backgroundColor: '#a371f7' }
-                                   }} 
-                                 />
-                               }
-                               label={<Typography variant="body2" sx={{ color: '#fff' }}>Include Tests</Typography>}
-                             />
-                          </Stack>
-                           
                            <Box>
                             <Typography variant="caption" sx={{ mb: 1, color: '#d0d7de', display: 'block' }}>
-                              File Extensions
+                              File Extensions (comma separated)
                             </Typography>
                             <TextField 
                               fullWidth 
@@ -570,6 +543,52 @@ const Landing: React.FC = () => {
                                 }
                               }}
                             />
+                          </Box>
+
+                          <Box>
+                            <Typography variant="caption" sx={{ mb: 1, color: '#d0d7de', display: 'block' }}>
+                              Excluded Paths (starts with)
+                            </Typography>
+                            <Stack direction="row" spacing={1} mb={1}>
+                              <TextField 
+                                fullWidth 
+                                size="small"
+                                placeholder="e.g. tests/"
+                                value={newExcludePath}
+                                onChange={(e) => setNewExcludePath(e.target.value)}
+                                InputProps={{
+                                  sx: { 
+                                    color: '#fff',
+                                    fontSize: '0.875rem',
+                                    '& fieldset': { borderColor: '#30363d' },
+                                    '&.Mui-focused fieldset': { borderColor: '#a371f7' },
+                                  }
+                                }}
+                              />
+                              <Button 
+                                variant="outlined" 
+                                onClick={() => {
+                                    if(newExcludePath) {
+                                        setExcludePaths([...excludePaths, newExcludePath]);
+                                        setNewExcludePath('');
+                                    }
+                                }}
+                                sx={{ borderColor: '#30363d', color: '#fff', '&:hover': { borderColor: '#8b949e' } }}
+                              >
+                                Add
+                              </Button>
+                            </Stack>
+                            <Stack direction="row" flexWrap="wrap" gap={1}>
+                                {excludePaths.map((path) => (
+                                    <Chip 
+                                        key={path} 
+                                        label={path} 
+                                        onDelete={() => setExcludePaths(excludePaths.filter(p => p !== path))}
+                                        size="small"
+                                        sx={{ bgcolor: '#21262d', color: '#fff', border: '1px solid #30363d' }}
+                                    />
+                                ))}
+                            </Stack>
                           </Box>
                         </Stack>
                       </Paper>

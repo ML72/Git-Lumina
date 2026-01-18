@@ -1,6 +1,6 @@
 import { Dispatch } from 'redux';
 import { setGraph, setName, resetGraphState, updateGraphCategories } from '../store/slices/graph';
-import { constructGraphFromZip } from '../utils/graphConstruction';
+import { constructGraphFromZip, GraphOptions } from '../utils/graphConstruction';
 import { openaiCategorize } from '../utils/openaiCategorize';
 import { setNewAlert } from './alert';
 
@@ -11,14 +11,15 @@ export const generateAndStoreGraph = async (
     file: File, 
     dispatch: Dispatch<any>, 
     navigate: (path: string, state?: any) => void,
-    apiKey?: string | null
+    apiKey?: string | null,
+    options?: GraphOptions
 ) => {
      try {
         console.log("Resetting previous graph state...");
         dispatch(resetGraphState());
 
         console.log("Starting graph construction...");
-        const graph = await constructGraphFromZip(file);
+        const graph = await constructGraphFromZip(file, options);
         
         if (!graph || graph.nodes.length === 0) {
              throw new Error("Could not extract any valid code files from the zip.");

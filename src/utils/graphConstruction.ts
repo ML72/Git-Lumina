@@ -2,7 +2,12 @@ import JSZip from 'jszip';
 import { CodebaseGraph } from '../types/CodebaseGraph';
 import { analyzeFile, getLanguageFromExtension } from './languageSyntax';
 
-export const constructGraphFromZip = async (zipFile: File): Promise<CodebaseGraph> => {
+export interface GraphOptions {
+    allowedExtensions: string[];
+    excludePaths: string[];
+}
+
+export const constructGraphFromZip = async (zipFile: File, options?: GraphOptions): Promise<CodebaseGraph> => {
     // 1. Unzip
     console.log(`Unzipping ${zipFile.name}...`);
     const zip = new JSZip();
@@ -20,6 +25,9 @@ export const constructGraphFromZip = async (zipFile: File): Promise<CodebaseGrap
     // We want to normalize paths by stripping that root folder.
     const rootFolder = Object.keys(contents.files)[0].split('/')[0] + '/';
 
+    const allowedExts = options?.allowedExtensions || ['js', 'jsx', 'ts', 'tsx', 'py', 'java', 'c', 'cpp', 'h', 'hpp', 'json', 'md', 'css', 'html', 'go', 'rs'];
+    const excludePaths = options?.excludePaths || [];
+
     for (const [relativePath, file] of Object.entries(contents.files)) {
         if (file.dir) continue;
         if (!relativePath.startsWith(rootFolder)) continue; 
@@ -28,12 +36,15 @@ export const constructGraphFromZip = async (zipFile: File): Promise<CodebaseGrap
         const path = relativePath.slice(rootFolder.length);
         if(!path) continue; // Root folder entry itself if technically not dir?
 
+        if (excludePaths.some(exclude => path.startsWith(exclude))) {
+            continue;
+        }
+
         const fileName = path.split('/').pop() || '';
         if (fileName.startsWith('.') || fileName === 'package-lock.json' || fileName === 'yarn.lock') continue;
 
         const ext = fileName.split('.').pop()?.toLowerCase();
-        // Allow-list for text/code files
-        const allowedExts = ['js', 'jsx', 'ts', 'tsx', 'py', 'java', 'c', 'cpp', 'h', 'hpp', 'json', 'md', 'css', 'html', 'go', 'rs'];
+        
         if (ext && allowedExts.includes(ext)) {
             const content = await file.async('string');
             files.push({
