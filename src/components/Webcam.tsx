@@ -104,7 +104,9 @@ const isHandOpen = (landmarks: NormalizedLandmarkList): boolean => {
 };
 
 // Check if hand is making a pinch gesture (thumb + index + middle pinched, pinky extended)
-const isHandPinching = (landmarks: NormalizedLandmarkList): boolean => {
+// sensitivityScale is used to compensate for user distance - when far away (high scale), 
+// fingers appear closer in normalized space, so we need stricter thresholds
+const isHandPinching = (landmarks: NormalizedLandmarkList, sensitivityScale: number = 1): boolean => {
     const wrist = landmarks[WRIST];
     const thumbTip = landmarks[THUMB_TIP];
     const indexTip = landmarks[INDEX_TIP];
@@ -118,8 +120,10 @@ const isHandPinching = (landmarks: NormalizedLandmarkList): boolean => {
     const thumbToMiddle = Math.hypot(thumbTip.x - middleTip.x, thumbTip.y - middleTip.y);
     const indexToMiddle = Math.hypot(indexTip.x - middleTip.x, indexTip.y - middleTip.y);
     
-    // Threshold for "pinched together" - fingers should be very close
-    const pinchThreshold = 0.08; // Normalized distance threshold
+    // Base threshold for "pinched together" - fingers should be very close
+    // Scale by inverse of sensitivityScale: when user is far (high scale), use smaller threshold
+    const basePinchThreshold = 0.08;
+    const pinchThreshold = basePinchThreshold / Math.max(sensitivityScale, 0.5);
     
     // Check if thumb, index, and middle are pinched together
     const fingersPinched = thumbToIndex < pinchThreshold && 
@@ -228,6 +232,8 @@ const Webcam: React.FC<WebcamProps> = ({
     });
     
     const frameCountRef = useRef(0);
+    const showOverlayRef = useRef(showOverlay);
+    const showVideoRef = useRef(showVideo);
     const gestureStateRef = useRef<GestureState>({
         leftHand: null,
         rightHand: null,
@@ -235,38 +241,36 @@ const Webcam: React.FC<WebcamProps> = ({
         sensitivityScale: 2,
         bodyCenter: { x: 0.5, y: 0.5 } // Default to center of frame
     });
+    
+    // Keep refs in sync with props
+    useEffect(() => {
+        showOverlayRef.current = showOverlay;
+        showVideoRef.current = showVideo;
+    }, [showOverlay, showVideo]);
 
     // Process hand detection results
     const onHandResults = useCallback((results: HandResults) => {
         frameCountRef.current++;
         
+        const shouldDraw = showOverlayRef.current || showVideoRef.current;
         const canvas = canvasRef.current;
-        const ctx = canvas?.getContext('2d');
+        const ctx = shouldDraw ? canvas?.getContext('2d') : null;
         
-        if (!canvas || !ctx) {
-            console.error('[Webcam] Canvas or context not available');
-            return;
-        }
-        
-        // Clear canvas
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
-        
-        // Draw video frame
-        if (results.image) {
-            ctx.save();
-            ctx.drawImage(results.image, 0, 0, canvas.width, canvas.height);
-            ctx.restore();
+        // Only draw if overlay/video is visible
+        if (shouldDraw && canvas && ctx) {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            if (results.image) {
+                ctx.save();
+                ctx.drawImage(results.image, 0, 0, canvas.width, canvas.height);
+                ctx.restore();
+            }
         }
         
         let leftHand: HandData | null = null;
         let rightHand: HandData | null = null;
         
         const handsDetected = results.multiHandLandmarks?.length || 0;
-        
-        // Debug: Log every 30 frames
-        if (frameCountRef.current % 30 === 0) {
-            console.log(`[Webcam] Frame ${frameCountRef.current}: Detected ${handsDetected} hands`);
-        }
         
         if (results.multiHandLandmarks && results.multiHandedness) {
             for (let i = 0; i < results.multiHandLandmarks.length; i++) {
@@ -280,12 +284,10 @@ const Webcam: React.FC<WebcamProps> = ({
                 const handData: HandData = {
                     position: getHandCenter(landmarks),
                     isOpen: isHandOpen(landmarks),
-                    isPinching: isHandPinching(landmarks),
+                    isPinching: isHandPinching(landmarks, gestureStateRef.current.sensitivityScale),
                     handedness: actualHandedness as 'Left' | 'Right',
                     landmarks: landmarks
                 };
-                
-                console.log(`[Webcam] Hand ${i}: ${actualHandedness}, Open: ${handData.isOpen}, Pinching: ${handData.isPinching}, Pos: (${handData.position.x.toFixed(2)}, ${handData.position.y.toFixed(2)})`);
                 
                 if (actualHandedness === 'Left') {
                     leftHand = handData;
@@ -293,8 +295,8 @@ const Webcam: React.FC<WebcamProps> = ({
                     rightHand = handData;
                 }
                 
-                // Draw landmarks on canvas
-                if (ctx) {
+                // Draw landmarks on canvas (only if visible)
+                if (shouldDraw && ctx && canvas) {
                     // Draw hand connections with thick lines
                     drawConnectors(ctx, landmarks, HAND_CONNECTIONS, {
                         color: handData.isOpen ? '#00FF00' : '#FF0000',
@@ -345,22 +347,24 @@ const Webcam: React.FC<WebcamProps> = ({
             }
         }
         
-        // Draw debug info panel
-        ctx.fillStyle = 'rgba(0, 0, 0, 0.8)';
-        ctx.fillRect(0, 0, 250, 140);
-        ctx.font = 'bold 14px monospace';
-        ctx.fillStyle = '#00FF00';
-        ctx.fillText('DEBUG INFO', 10, 20);
-        ctx.font = '12px monospace';
-        ctx.fillStyle = '#FFFFFF';
-        ctx.fillText(`Frame: ${frameCountRef.current}`, 10, 40);
-        ctx.fillText(`Hands Detected: ${handsDetected}`, 10, 55);
-        ctx.fillText(`Left: ${leftHand ? `(${leftHand.position.x.toFixed(2)}, ${leftHand.position.y.toFixed(2)}) ${leftHand.isOpen ? 'OPEN' : 'CLOSED'}` : 'Not detected'}`, 10, 70);
-        ctx.fillText(`Right: ${rightHand ? `(${rightHand.position.x.toFixed(2)}, ${rightHand.position.y.toFixed(2)}) ${rightHand.isOpen ? 'OPEN' : 'CLOSED'}` : 'Not detected'}`, 10, 85);
-        ctx.fillText(`Wingspan: ${gestureStateRef.current.wingspan.toFixed(3)}`, 10, 100);
-        ctx.fillText(`Sensitivity: ${gestureStateRef.current.sensitivityScale.toFixed(2)}x`, 10, 115);
-        ctx.fillStyle = handsDetected > 0 ? '#00FF00' : '#FF6B6B';
-        ctx.fillText(`Status: ${handsDetected > 0 ? 'TRACKING' : 'SEARCHING...'}`, 10, 130);
+        // Draw debug info panel (only if visible)
+        if (shouldDraw && ctx) {
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.8)';
+            ctx.fillRect(0, 0, 250, 140);
+            ctx.font = 'bold 14px monospace';
+            ctx.fillStyle = '#00FF00';
+            ctx.fillText('DEBUG INFO', 10, 20);
+            ctx.font = '12px monospace';
+            ctx.fillStyle = '#FFFFFF';
+            ctx.fillText(`Frame: ${frameCountRef.current}`, 10, 40);
+            ctx.fillText(`Hands Detected: ${handsDetected}`, 10, 55);
+            ctx.fillText(`Left: ${leftHand ? `(${leftHand.position.x.toFixed(2)}, ${leftHand.position.y.toFixed(2)}) ${leftHand.isOpen ? 'OPEN' : 'CLOSED'}` : 'Not detected'}`, 10, 70);
+            ctx.fillText(`Right: ${rightHand ? `(${rightHand.position.x.toFixed(2)}, ${rightHand.position.y.toFixed(2)}) ${rightHand.isOpen ? 'OPEN' : 'CLOSED'}` : 'Not detected'}`, 10, 85);
+            ctx.fillText(`Wingspan: ${gestureStateRef.current.wingspan.toFixed(3)}`, 10, 100);
+            ctx.fillText(`Sensitivity: ${gestureStateRef.current.sensitivityScale.toFixed(2)}x`, 10, 115);
+            ctx.fillStyle = handsDetected > 0 ? '#00FF00' : '#FF6B6B';
+            ctx.fillText(`Status: ${handsDetected > 0 ? 'TRACKING' : 'SEARCHING...'}`, 10, 130);
+        }
         
         // Update debug state
         setDebugState(prev => ({
@@ -420,8 +424,8 @@ const Webcam: React.FC<WebcamProps> = ({
                 };
             }
             
-            // Draw pose on canvas if overlay is enabled
-            if (canvasRef.current) {
+            // Draw pose on canvas only if overlay is visible
+            if (showOverlayRef.current && canvasRef.current) {
                 const ctx = canvasRef.current.getContext('2d');
                 if (ctx) {
                     // Draw pose connections for arms only
@@ -493,16 +497,15 @@ const Webcam: React.FC<WebcamProps> = ({
                 const hands = new Hands({
                     locateFile: (file) => {
                         const url = `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`;
-                        console.log(`[Webcam] Loading: ${url}`);
                         return url;
                     }
                 });
                 
                 hands.setOptions({
                     maxNumHands: 2,
-                    modelComplexity: 1,
-                    minDetectionConfidence: 0.5, // Lowered for better detection
-                    minTrackingConfidence: 0.5
+                    modelComplexity: 0, // Reduced from 1 to 0 for better performance
+                    minDetectionConfidence: 0.4, // Lowered for better tracking during fast movement
+                    minTrackingConfidence: 0.3  // Lowered to maintain tracking during quick movements
                 });
                 
                 hands.onResults(onHandResults);
@@ -516,15 +519,14 @@ const Webcam: React.FC<WebcamProps> = ({
                 const pose = new Pose({
                     locateFile: (file) => {
                         const url = `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}`;
-                        console.log(`[Webcam] Loading: ${url}`);
                         return url;
                     }
                 });
                 
                 pose.setOptions({
-                    modelComplexity: 1,
+                    modelComplexity: 0, // Reduced from 1 to 0 for better performance
                     smoothLandmarks: true,
-                    minDetectionConfidence: 0.5,
+                    minDetectionConfidence: 0.6,
                     minTrackingConfidence: 0.5
                 });
                 
@@ -534,24 +536,31 @@ const Webcam: React.FC<WebcamProps> = ({
                 
                 setDebugState(prev => ({ ...prev, mediapipeLoaded: true, status: 'Starting camera...' }));
                 
-                // Set up camera
-                console.log('[Webcam] Starting camera...');
+                // Frame skip counter for performance optimization
+                let processFrameCount = 0;
+                const POSE_FRAME_SKIP = 15; // Process pose every 15th frame (wingspan changes slowly)
+                
+                // Set up camera with reduced resolution for better performance
                 const camera = new Camera(videoRef.current, {
                     onFrame: async () => {
                         if (videoRef.current && handsRef.current && poseRef.current) {
+                            processFrameCount++;
+                            
                             try {
-                                // IMPORTANT: Process pose FIRST to update sensitivityScale
-                                // before hands are processed. This ensures the hand deltas
-                                // are scaled by the current frame's wingspan, not a stale value.
-                                await poseRef.current.send({ image: videoRef.current });
+                                // Process pose less frequently - wingspan doesn't change fast
+                                if (processFrameCount % POSE_FRAME_SKIP === 0) {
+                                    await poseRef.current.send({ image: videoRef.current });
+                                }
+                                
+                                // Process hands every frame for responsive tracking
                                 await handsRef.current.send({ image: videoRef.current });
                             } catch (err) {
-                                console.error('[Webcam] Error processing frame:', err);
+                                // Silently ignore frame processing errors
                             }
                         }
                     },
-                    width: 640,
-                    height: 480
+                    width: 480,  // Reduced from 640 for better performance
+                    height: 360  // Reduced from 480 for better performance
                 });
                 
                 cameraRef.current = camera;

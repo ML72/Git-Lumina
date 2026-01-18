@@ -292,11 +292,8 @@ const GraphDisplay = forwardRef<GraphDisplayRef, GraphDisplayProps>(({ isGesture
         
         // Check if click is within canvas bounds
         if (screenX < rect.left || screenX > rect.right || screenY < rect.top || screenY > rect.bottom) {
-            console.log('[GraphDisplay] Click outside canvas bounds');
             return;
         }
-        
-        console.log(`[GraphDisplay] Dispatching click at (${screenX.toFixed(0)}, ${screenY.toFixed(0)})`);
         
         // Dispatch mouse events on the canvas to trigger reagraph's internal click handling
         const mousedownEvent = new MouseEvent('mousedown', {
@@ -420,11 +417,9 @@ const GraphDisplay = forwardRef<GraphDisplayRef, GraphDisplayProps>(({ isGesture
         }
         
         if (nearestNode) {
-            console.log(`[GraphDisplay] Selected node: ${nearestNode.label}`);
             setSelectedNodeData(nearestNode.data);
             setIsModalOpen(true);
         } else {
-            console.log('[GraphDisplay] No node found near click position');
             // Try dispatching a click event as fallback
             clickAtScreenPosition(clickScreenX, clickScreenY);
         }
@@ -472,7 +467,6 @@ const GraphDisplay = forwardRef<GraphDisplayRef, GraphDisplayProps>(({ isGesture
     // Find nearest node to a normalized position and return its ID
     const getHoveredNode = useCallback((normX: number, normY: number): string | null => {
         if (!graphRef.current || !containerRef.current) {
-            console.log('[GraphDisplay] getHoveredNode: refs not available');
             return null;
         }
         
@@ -481,17 +475,14 @@ const GraphDisplay = forwardRef<GraphDisplayRef, GraphDisplayProps>(({ isGesture
         const canvas = containerRef.current.querySelector('canvas');
         
         if (!controls || !canvas) {
-            console.log('[GraphDisplay] Missing controls or canvas');
             return null;
         }
         
         // Get camera from controls - it's stored as 'camera' not 'object'
         const camera = controls.camera || controls.object;
         if (!camera) {
-            console.log('[GraphDisplay] No camera found on controls. Keys:', Object.keys(controls).filter(k => k.includes('cam') || k.includes('Cam')));
             return null;
         }
-        console.log('[GraphDisplay] Camera found:', camera.type || 'unknown type');
         
         // Try multiple ways to get the scene
         let scene = controls._scene || controls.scene;
@@ -499,7 +490,7 @@ const GraphDisplay = forwardRef<GraphDisplayRef, GraphDisplayProps>(({ isGesture
         // Try from controls.__r3f
         if (!scene && controls.__r3f) {
             const r3f = controls.__r3f;
-            scene = r3f.parent?.parent; // Scene is often 2 levels up
+            scene = r3f.parent?.parent;
             if (!scene?.isScene) {
                 scene = r3f.root?.getState?.()?.scene;
             }
@@ -509,13 +500,11 @@ const GraphDisplay = forwardRef<GraphDisplayRef, GraphDisplayProps>(({ isGesture
         if (!scene) {
             const canvasAny = canvas as any;
             const r3fState = canvasAny.__r3f;
-            console.log('[GraphDisplay] canvas.__r3f:', r3fState ? Object.keys(r3fState) : 'null');
             if (r3fState?.fiber?.current?.scene) {
                 scene = r3fState.fiber.current.scene;
             } else if (r3fState?.store?.getState) {
                 const state = r3fState.store.getState();
                 scene = state?.scene;
-                console.log('[GraphDisplay] r3f store state keys:', state ? Object.keys(state) : 'null');
             }
         }
         
@@ -530,10 +519,7 @@ const GraphDisplay = forwardRef<GraphDisplayRef, GraphDisplayProps>(({ isGesture
             }
         }
         
-        console.log('[GraphDisplay] scene:', scene ? 'available' : 'null');
-        
         if (!scene) {
-            console.log('[GraphDisplay] Could not find Three.js scene');
             return null;
         }
         
@@ -545,7 +531,6 @@ const GraphDisplay = forwardRef<GraphDisplayRef, GraphDisplayProps>(({ isGesture
         const nodeMeshes: Array<{ id: string; position: { x: number; y: number; z: number } }> = [];
         
         scene.traverse((obj: any) => {
-            // Look for objects that represent nodes - they might have userData.id or name matching node ids
             if (obj.userData?.id !== undefined || obj.userData?.nodeId !== undefined) {
                 nodeMeshes.push({
                     id: String(obj.userData.id ?? obj.userData.nodeId),
@@ -559,48 +544,23 @@ const GraphDisplay = forwardRef<GraphDisplayRef, GraphDisplayProps>(({ isGesture
             }
         });
         
-        console.log('[GraphDisplay] Found node meshes:', nodeMeshes.length);
-        console.log(`[GraphDisplay] Target click position: (${targetScreenX.toFixed(0)}, ${targetScreenY.toFixed(0)}) in canvas of size ${rect.width.toFixed(0)}x${rect.height.toFixed(0)}`);
-        
         let nearestNodeId: string | null = null;
         let nearestDist = Infinity;
-        const threshold = 150; // pixels - increased for debugging
-        
-        // Log first few node projections for debugging
-        let logCount = 0;
+        const threshold = 150; // pixels
         
         for (const mesh of nodeMeshes) {
             const projected = projectPoint(mesh.position, camera);
-            if (!projected) {
-                if (logCount < 3) console.log(`[GraphDisplay] Node ${mesh.id}: projection failed`);
-                continue;
-            }
-            if (projected.z > 1) {
-                if (logCount < 3) console.log(`[GraphDisplay] Node ${mesh.id}: behind camera (z=${projected.z.toFixed(2)})`);
-                continue;
-            }
+            if (!projected || projected.z > 1) continue;
             
             const screenX = ((projected.x + 1) / 2) * rect.width;
             const screenY = ((-projected.y + 1) / 2) * rect.height;
             
             const dist = Math.hypot(screenX - targetScreenX, screenY - targetScreenY);
             
-            // Log first few nodes and any that are close
-            if (logCount < 5 || dist < 300) {
-                console.log(`[GraphDisplay] Node ${mesh.id}: 3D(${mesh.position.x.toFixed(1)}, ${mesh.position.y.toFixed(1)}, ${mesh.position.z.toFixed(1)}) -> screen(${screenX.toFixed(0)}, ${screenY.toFixed(0)}) dist=${dist.toFixed(0)}px`);
-                logCount++;
-            }
-            
             if (dist < nearestDist && dist < threshold) {
                 nearestDist = dist;
                 nearestNodeId = mesh.id;
             }
-        }
-        
-        if (nearestNodeId) {
-            console.log(`[GraphDisplay] MATCH: Node ${nearestNodeId} at ${nearestDist.toFixed(0)}px`);
-        } else {
-            console.log(`[GraphDisplay] No node within ${threshold}px of click`);
         }
         
         return nearestNodeId;
@@ -613,14 +573,12 @@ const GraphDisplay = forwardRef<GraphDisplayRef, GraphDisplayProps>(({ isGesture
         if (nodeId) {
             const node = baseNodes.find((n: GraphNode) => n.id === nodeId || n.id === String(nodeId));
             if (node) {
-                console.log(`[GraphDisplay] Selecting node: ${node.label}`);
                 setSelectedNodeData(node.data);
                 setIsModalOpen(true);
                 return true;
             }
         }
         
-        console.log('[GraphDisplay] No node found at position');
         return false;
     }, [baseNodes, getHoveredNode]);
 
@@ -670,7 +628,6 @@ const GraphDisplay = forwardRef<GraphDisplayRef, GraphDisplayProps>(({ isGesture
         
         if (isGestureActive && !wasGestureActiveRef.current) {
             // Just became active - save current settings and disable everything
-            console.log('[GraphDisplay] Gesture started - disabling all camera controls');
             originalSettingsRef.current = {
                 azimuth: controls.azimuthRotateSpeed,
                 polar: controls.polarRotateSpeed,
@@ -685,7 +642,6 @@ const GraphDisplay = forwardRef<GraphDisplayRef, GraphDisplayProps>(({ isGesture
             controls.update(0);
         } else if (!isGestureActive && wasGestureActiveRef.current) {
             // Just became inactive - restore settings
-            console.log('[GraphDisplay] Gesture ended - re-enabling camera controls');
             controls.enabled = originalSettingsRef.current.enabled;
             controls.azimuthRotateSpeed = originalSettingsRef.current.azimuth;
             controls.polarRotateSpeed = originalSettingsRef.current.polar;
