@@ -1,4 +1,4 @@
-import React, { useMemo, useRef, useEffect, useCallback, useImperativeHandle, forwardRef } from 'react';
+import React, { useMemo, useRef, useEffect, useCallback, useImperativeHandle, forwardRef, useState } from 'react';
 import { Box, Typography, useTheme } from '@mui/material';
 import { useSelector } from 'react-redux';
 import { GraphCanvas, GraphNode, GraphEdge, darkTheme, lightTheme, GraphCanvasRef } from 'reagraph';
@@ -9,6 +9,7 @@ import { CodebaseGraph } from '../types/CodebaseGraph';
 export interface GraphDisplayRef {
     applyGestureControl: (control: GestureControlState) => void;
     resetView: () => void;
+    setCameraMode: (mode: 'rotate' | 'orbit' | 'pan') => void;
 }
 
 interface GraphDisplayProps {
@@ -23,6 +24,9 @@ const GraphDisplay = forwardRef<GraphDisplayRef, GraphDisplayProps>(({ cursors, 
     const graphData = graph || reduxGraph; // Use prop if provided, otherwise use Redux
     const graphRef = useRef<GraphCanvasRef | null>(null);
     const containerRef = useRef<HTMLDivElement>(null);
+    
+    // Camera mode state - can be changed dynamically
+    const [cameraMode, setCameraMode] = useState<'rotate' | 'orbit' | 'pan'>('rotate');
     
     // Track accumulated camera state for gesture controls
     const cameraStateRef = useRef({
@@ -152,7 +156,8 @@ const GraphDisplay = forwardRef<GraphDisplayRef, GraphDisplayProps>(({ cursors, 
     // Expose methods to parent
     useImperativeHandle(ref, () => ({
         applyGestureControl,
-        resetView
+        resetView,
+        setCameraMode
     }), [applyGestureControl, resetView]);
 
     useEffect(() => {
@@ -262,7 +267,7 @@ const GraphDisplay = forwardRef<GraphDisplayRef, GraphDisplayProps>(({ cursors, 
                 theme={theme.palette.mode === 'dark' ? darkTheme : lightTheme}
                 draggable
                 animated={!isGestureActive} // Pause animation when user is controlling with gestures
-                cameraMode="rotate"
+                cameraMode={cameraMode}
                 layoutOverrides={{
                     nodeStrength: -1000,
                     linkDistance: 150
