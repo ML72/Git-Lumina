@@ -18,6 +18,11 @@ export interface GraphDisplayRef {
     selectNode: (filepath: string) => void;
     focusNodes: (nodeIds: string[]) => void;
     setCameraMode: (mode: 'rotate' | 'orbit' | 'pan') => void;
+    clickAtScreenPosition: (x: number, y: number) => void;
+    clickAtNormalizedPosition: (normX: number, normY: number) => void;
+    selectNodeAtPosition: (normX: number, normY: number) => boolean;
+    getHoveredNode: (normX: number, normY: number) => string | null;
+    closeModal: () => void;
 }
 
 interface GraphDisplayProps {
@@ -91,8 +96,9 @@ const GraphDisplay = forwardRef<GraphDisplayRef, GraphDisplayProps>(({ isGesture
             
             // Formula: Size proportional to 1 + ln(x+1) + ln(y+1)
             // Using a multiplier to scale it to appropriate pixel size
+            // Doubled the multiplier (3 -> 6) for larger hitboxes
             const rawSize = 1 + Math.log(x + 1) + Math.log(y + 1);
-            const size = rawSize * 3; 
+            const size = rawSize * 6; 
 
             return {
                 id: nodeId, // Using index as ID to match edge source/target
@@ -267,15 +273,375 @@ const GraphDisplay = forwardRef<GraphDisplayRef, GraphDisplayProps>(({ isGesture
             setIsModalOpen(true);
         }
     }, [baseNodes]);
+    
+    // Click at a specific screen position (for gesture-based clicking)
+    // Simply dispatches mouse events on the canvas to trigger reagraph's click handling
+    const clickAtScreenPosition = useCallback((screenX: number, screenY: number) => {
+        if (!containerRef.current) {
+            console.warn('[GraphDisplay] Container not available');
+            return;
+        }
+        
+        const canvas = containerRef.current.querySelector('canvas');
+        if (!canvas) {
+            console.warn('[GraphDisplay] Canvas not found');
+            return;
+        }
+        
+        const rect = canvas.getBoundingClientRect();
+        
+        // Check if click is within canvas bounds
+        if (screenX < rect.left || screenX > rect.right || screenY < rect.top || screenY > rect.bottom) {
+            console.log('[GraphDisplay] Click outside canvas bounds');
+            return;
+        }
+        
+        console.log(`[GraphDisplay] Dispatching click at (${screenX.toFixed(0)}, ${screenY.toFixed(0)})`);
+        
+        // Dispatch mouse events on the canvas to trigger reagraph's internal click handling
+        const mousedownEvent = new MouseEvent('mousedown', {
+            bubbles: true,
+            cancelable: true,
+            view: window,
+            clientX: screenX,
+            clientY: screenY,
+            button: 0,
+            buttons: 1
+        });
+        
+        const mouseupEvent = new MouseEvent('mouseup', {
+            bubbles: true,
+            cancelable: true,
+            view: window,
+            clientX: screenX,
+            clientY: screenY,
+            button: 0,
+            buttons: 0
+        });
+        
+        const clickEvent = new MouseEvent('click', {
+            bubbles: true,
+            cancelable: true,
+            view: window,
+            clientX: screenX,
+            clientY: screenY,
+            button: 0
+        });
+        
+        // Dispatch events on canvas with small delay between them
+        canvas.dispatchEvent(mousedownEvent);
+        setTimeout(() => {
+            canvas.dispatchEvent(mouseupEvent);
+            canvas.dispatchEvent(clickEvent);
+        }, 50);
+    }, []);
+    
+    // Click using normalized position (0-1 range, already mirrored for cursor display)
+    // This method tries to find the nearest node using reagraph's internal graph data
+    const clickAtNormalizedPosition = useCallback((normX: number, normY: number) => {
+        if (!graphRef.current || !containerRef.current) {
+            console.warn('[GraphDisplay] graphRef or container not available');
+            return;
+        }
+        
+        console.log(`[GraphDisplay] Click at normalized position (${normX.toFixed(3)}, ${normY.toFixed(3)})`);
+        
+        const graphRefAny = graphRef.current as any;
+        
+        // Try to get the internal graph with node positions
+        const internalGraph = graphRefAny.getGraph?.();
+        
+        if (!internalGraph) {
+            console.warn('[GraphDisplay] Internal graph not available');
+            // Fallback to screen position click
+            const rect = containerRef.current.getBoundingClientRect();
+            clickAtScreenPosition(rect.left + normX * rect.width, rect.top + normY * rect.height);
+            return;
+        }
+        
+        // Get camera for projection
+        const camera = graphRefAny.camera;
+        const canvas = containerRef.current.querySelector('canvas');
+        
+        if (!camera || !canvas) {
+            console.warn('[GraphDisplay] Camera or canvas not available');
+            return;
+        }
+        
+        const rect = canvas.getBoundingClientRect();
+        const clickScreenX = rect.left + normX * rect.width;
+        const clickScreenY = rect.top + normY * rect.height;
+        
+        console.log(`[GraphDisplay] Looking for node near screen (${clickScreenX.toFixed(0)}, ${clickScreenY.toFixed(0)})`);
+        
+        // Try to find the nearest node by projecting 3D positions to screen
+        let nearestNode: GraphNode | null = null;
+        let nearestDist = Infinity;
+        const threshold = 80; // pixels
+        
+        // Method: iterate through internal graph nodes and project to screen
+        const graphNodes = internalGraph.nodes || [];
+        
+        for (const gNode of graphNodes) {
+            // Check if node has position data
+            if (gNode.x === undefined || gNode.y === undefined) continue;
+            
+            // Project 3D position to normalized device coordinates
+            const pos = { x: gNode.x, y: gNode.y, z: gNode.z || 0 };
+            
+            // Manual projection: transform by camera matrices
+            // This is a simplified version - may not be 100% accurate
+            const vector = {
+                x: pos.x,
+                y: pos.y,
+                z: pos.z
+            };
+            
+            // Apply camera view-projection (simplified)
+            if (camera.matrixWorldInverse && camera.projectionMatrix) {
+                // Use Three.js-like projection if available
+                const projected = projectPoint(vector, camera);
+                if (projected) {
+                    const screenX = ((projected.x + 1) / 2) * rect.width + rect.left;
+                    const screenY = ((-projected.y + 1) / 2) * rect.height + rect.top;
+                    
+                    const dist = Math.hypot(screenX - clickScreenX, screenY - clickScreenY);
+                    
+                    if (dist < nearestDist && dist < threshold) {
+                        const node = baseNodes.find((n: GraphNode) => n.id === gNode.id || n.id === String(gNode.id));
+                        if (node) {
+                            nearestDist = dist;
+                            nearestNode = node;
+                            console.log(`[GraphDisplay] Candidate node at ${dist.toFixed(0)}px: ${node.label}`);
+                        }
+                    }
+                }
+            }
+        }
+        
+        if (nearestNode) {
+            console.log(`[GraphDisplay] Selected node: ${nearestNode.label}`);
+            setSelectedNodeData(nearestNode.data);
+            setIsModalOpen(true);
+        } else {
+            console.log('[GraphDisplay] No node found near click position');
+            // Try dispatching a click event as fallback
+            clickAtScreenPosition(clickScreenX, clickScreenY);
+        }
+    }, [baseNodes, clickAtScreenPosition]);
+    
+    // Helper function to project a 3D point to screen coordinates
+    const projectPoint = (point: { x: number; y: number; z: number }, camera: any): { x: number; y: number; z: number } | null => {
+        try {
+            // Check if camera has the necessary matrices
+            if (!camera.matrixWorldInverse || !camera.projectionMatrix) {
+                return null;
+            }
+            
+            // Create a simple vector and apply transformations
+            let x = point.x, y = point.y, z = point.z;
+            
+            // Apply view matrix (matrixWorldInverse)
+            const vm = camera.matrixWorldInverse.elements;
+            const vx = vm[0]*x + vm[4]*y + vm[8]*z + vm[12];
+            const vy = vm[1]*x + vm[5]*y + vm[9]*z + vm[13];
+            const vz = vm[2]*x + vm[6]*y + vm[10]*z + vm[14];
+            const vw = vm[3]*x + vm[7]*y + vm[11]*z + vm[15];
+            
+            // Apply projection matrix
+            const pm = camera.projectionMatrix.elements;
+            const px = pm[0]*vx + pm[4]*vy + pm[8]*vz + pm[12]*vw;
+            const py = pm[1]*vx + pm[5]*vy + pm[9]*vz + pm[13]*vw;
+            const pz = pm[2]*vx + pm[6]*vy + pm[10]*vz + pm[14]*vw;
+            const pw = pm[3]*vx + pm[7]*vy + pm[11]*vz + pm[15]*vw;
+            
+            // Perspective divide
+            if (Math.abs(pw) < 0.0001) return null;
+            
+            return {
+                x: px / pw,
+                y: py / pw,
+                z: pz / pw
+            };
+        } catch (e) {
+            console.warn('[GraphDisplay] Error projecting point:', e);
+            return null;
+        }
+    };
+    
+    // Find nearest node to a normalized position and return its ID
+    const getHoveredNode = useCallback((normX: number, normY: number): string | null => {
+        if (!graphRef.current || !containerRef.current) {
+            console.log('[GraphDisplay] getHoveredNode: refs not available');
+            return null;
+        }
+        
+        const graphRefAny = graphRef.current as any;
+        const controls = graphRefAny.getControls?.();
+        const canvas = containerRef.current.querySelector('canvas');
+        
+        if (!controls || !canvas) {
+            console.log('[GraphDisplay] Missing controls or canvas');
+            return null;
+        }
+        
+        // Get camera from controls - it's stored as 'camera' not 'object'
+        const camera = controls.camera || controls.object;
+        if (!camera) {
+            console.log('[GraphDisplay] No camera found on controls. Keys:', Object.keys(controls).filter(k => k.includes('cam') || k.includes('Cam')));
+            return null;
+        }
+        console.log('[GraphDisplay] Camera found:', camera.type || 'unknown type');
+        
+        // Try multiple ways to get the scene
+        let scene = controls._scene || controls.scene;
+        
+        // Try from controls.__r3f
+        if (!scene && controls.__r3f) {
+            const r3f = controls.__r3f;
+            scene = r3f.parent?.parent; // Scene is often 2 levels up
+            if (!scene?.isScene) {
+                scene = r3f.root?.getState?.()?.scene;
+            }
+        }
+        
+        // Try from canvas __r3f
+        if (!scene) {
+            const canvasAny = canvas as any;
+            const r3fState = canvasAny.__r3f;
+            console.log('[GraphDisplay] canvas.__r3f:', r3fState ? Object.keys(r3fState) : 'null');
+            if (r3fState?.fiber?.current?.scene) {
+                scene = r3fState.fiber.current.scene;
+            } else if (r3fState?.store?.getState) {
+                const state = r3fState.store.getState();
+                scene = state?.scene;
+                console.log('[GraphDisplay] r3f store state keys:', state ? Object.keys(state) : 'null');
+            }
+        }
+        
+        // Try to get scene from camera's parent chain
+        if (!scene && camera.parent) {
+            let parent = camera.parent;
+            while (parent && !parent.isScene) {
+                parent = parent.parent;
+            }
+            if (parent?.isScene) {
+                scene = parent;
+            }
+        }
+        
+        console.log('[GraphDisplay] scene:', scene ? 'available' : 'null');
+        
+        if (!scene) {
+            console.log('[GraphDisplay] Could not find Three.js scene');
+            return null;
+        }
+        
+        const rect = canvas.getBoundingClientRect();
+        const targetScreenX = normX * rect.width;
+        const targetScreenY = normY * rect.height;
+        
+        // Find all node meshes in the scene
+        const nodeMeshes: Array<{ id: string; position: { x: number; y: number; z: number } }> = [];
+        
+        scene.traverse((obj: any) => {
+            // Look for objects that represent nodes - they might have userData.id or name matching node ids
+            if (obj.userData?.id !== undefined || obj.userData?.nodeId !== undefined) {
+                nodeMeshes.push({
+                    id: String(obj.userData.id ?? obj.userData.nodeId),
+                    position: { x: obj.position.x, y: obj.position.y, z: obj.position.z }
+                });
+            } else if (obj.name && obj.name.startsWith('node-')) {
+                nodeMeshes.push({
+                    id: obj.name.replace('node-', ''),
+                    position: { x: obj.position.x, y: obj.position.y, z: obj.position.z }
+                });
+            }
+        });
+        
+        console.log('[GraphDisplay] Found node meshes:', nodeMeshes.length);
+        console.log(`[GraphDisplay] Target click position: (${targetScreenX.toFixed(0)}, ${targetScreenY.toFixed(0)}) in canvas of size ${rect.width.toFixed(0)}x${rect.height.toFixed(0)}`);
+        
+        let nearestNodeId: string | null = null;
+        let nearestDist = Infinity;
+        const threshold = 150; // pixels - increased for debugging
+        
+        // Log first few node projections for debugging
+        let logCount = 0;
+        
+        for (const mesh of nodeMeshes) {
+            const projected = projectPoint(mesh.position, camera);
+            if (!projected) {
+                if (logCount < 3) console.log(`[GraphDisplay] Node ${mesh.id}: projection failed`);
+                continue;
+            }
+            if (projected.z > 1) {
+                if (logCount < 3) console.log(`[GraphDisplay] Node ${mesh.id}: behind camera (z=${projected.z.toFixed(2)})`);
+                continue;
+            }
+            
+            const screenX = ((projected.x + 1) / 2) * rect.width;
+            const screenY = ((-projected.y + 1) / 2) * rect.height;
+            
+            const dist = Math.hypot(screenX - targetScreenX, screenY - targetScreenY);
+            
+            // Log first few nodes and any that are close
+            if (logCount < 5 || dist < 300) {
+                console.log(`[GraphDisplay] Node ${mesh.id}: 3D(${mesh.position.x.toFixed(1)}, ${mesh.position.y.toFixed(1)}, ${mesh.position.z.toFixed(1)}) -> screen(${screenX.toFixed(0)}, ${screenY.toFixed(0)}) dist=${dist.toFixed(0)}px`);
+                logCount++;
+            }
+            
+            if (dist < nearestDist && dist < threshold) {
+                nearestDist = dist;
+                nearestNodeId = mesh.id;
+            }
+        }
+        
+        if (nearestNodeId) {
+            console.log(`[GraphDisplay] MATCH: Node ${nearestNodeId} at ${nearestDist.toFixed(0)}px`);
+        } else {
+            console.log(`[GraphDisplay] No node within ${threshold}px of click`);
+        }
+        
+        return nearestNodeId;
+    }, []);
+    
+    // Directly select a node at the given normalized position
+    const selectNodeAtPosition = useCallback((normX: number, normY: number): boolean => {
+        const nodeId = getHoveredNode(normX, normY);
+        
+        if (nodeId) {
+            const node = baseNodes.find((n: GraphNode) => n.id === nodeId || n.id === String(nodeId));
+            if (node) {
+                console.log(`[GraphDisplay] Selecting node: ${node.label}`);
+                setSelectedNodeData(node.data);
+                setIsModalOpen(true);
+                return true;
+            }
+        }
+        
+        console.log('[GraphDisplay] No node found at position');
+        return false;
+    }, [baseNodes, getHoveredNode]);
 
     // Expose methods to parent
+    // Close modal function to expose
+    const closeModal = useCallback(() => {
+        setIsModalOpen(false);
+    }, []);
+
     useImperativeHandle(ref, () => ({
         applyGestureControl,
         resetView,
         selectNode,
         focusNodes,
-        setCameraMode
-    }), [applyGestureControl, resetView, selectNode, focusNodes, cameraMode]);
+        setCameraMode,
+        clickAtScreenPosition,
+        clickAtNormalizedPosition,
+        selectNodeAtPosition,
+        getHoveredNode,
+        closeModal
+    }), [applyGestureControl, resetView, selectNode, focusNodes, cameraMode, clickAtScreenPosition, clickAtNormalizedPosition, selectNodeAtPosition, getHoveredNode, closeModal]);
 
     useEffect(() => {
         if (graphRef.current && nodes.length > 0) {
