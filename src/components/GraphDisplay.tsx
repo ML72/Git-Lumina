@@ -28,9 +28,10 @@ export interface GraphDisplayRef {
 interface GraphDisplayProps {
     isGestureActive?: boolean; // Pause animation when user is controlling with gestures
     graph?: CodebaseGraph | null; // Optional direct graph prop
+    autoRotate?: boolean; // Initial auto-rotate state
 }
 
-const GraphDisplay = forwardRef<GraphDisplayRef, GraphDisplayProps>(({ isGestureActive = false, graph }, ref) => {
+const GraphDisplay = forwardRef<GraphDisplayRef, GraphDisplayProps>(({ isGestureActive = false, graph, autoRotate = true }, ref) => {
     const theme = useTheme();
     const reduxGraph = useSelector(selectGraph);
     const graphData = graph || reduxGraph; // Use prop if provided, otherwise use Redux
@@ -38,7 +39,7 @@ const GraphDisplay = forwardRef<GraphDisplayRef, GraphDisplayProps>(({ isGesture
     const containerRef = useRef<HTMLDivElement>(null);
     
     // Camera mode state - can be changed dynamically
-    const [cameraMode, setCameraMode] = useState<'rotate' | 'orbit' | 'pan'>('rotate');
+    const [cameraMode, setCameraMode] = useState<'rotate' | 'orbit' | 'pan'>(autoRotate ? 'orbit' : 'rotate');
     
     // State for modal
     const [selectedNodeData, setSelectedNodeData] = useState<any | null>(null);

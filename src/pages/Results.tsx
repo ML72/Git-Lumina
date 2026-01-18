@@ -95,6 +95,7 @@ const Results: React.FC = () => {
   const apiKey = useSelector(selectOpenAiKey);
   const [query, setQuery] = useState('');
   const [webcamEnabled, setWebcamEnabled] = useState(true);
+  const [permissionDenied, setPermissionDenied] = useState(false);
   const [autoRotateEnabled, setAutoRotateEnabled] = useState(true);
   const [activeHandCount, setActiveHandCount] = useState(0);
   const [gestureMode, setGestureMode] = useState<'idle' | 'left-hand-rotate' | 'right-hand-pan' | 'two-hand-zoom'>('idle');
@@ -479,6 +480,7 @@ const Results: React.FC = () => {
   // Handle webcam error
   const handleWebcamError = useCallback(() => {
     setWebcamEnabled(false);
+    setPermissionDenied(true);
   }, []);
 
   const handleSuggestedQuestion = (text: string) => {
@@ -1051,6 +1053,7 @@ const Results: React.FC = () => {
             ref={graphDisplayRef}
             graph={largeGraph}
             isGestureActive={webcamEnabled && activeHandCount > 0}
+            autoRotate={autoRotateEnabled}
           />
           
           {/* Quest Hint Popup */}
@@ -1269,6 +1272,7 @@ const Results: React.FC = () => {
                 Motion Control
               </Typography>
               <Switch
+                disabled={permissionDenied}
                 checked={webcamEnabled}
                 onChange={(e) => setWebcamEnabled(e.target.checked)}
                 size="small"
