@@ -118,7 +118,11 @@ const Results: React.FC = () => {
   // Track sensitivity scale for cursor positioning
   const [sensitivityScale, setSensitivityScale] = useState(1);
   
+  // Debug: track click positions to visualize
+  const [clickIndicator, setClickIndicator] = useState<{ x: number; y: number } | null>(null);
+  
   const graphDisplayRef = useRef<GraphDisplayRef>(null);
+  const graphContainerRef = useRef<HTMLDivElement>(null);
   const { processGesture } = useGestureControls();
   const [chat, setChat] = useState(MOCK_CHAT);
   
@@ -336,10 +340,19 @@ const Results: React.FC = () => {
     const currentLeftPinch = gestureState.leftHand?.isPinching ?? false;
     const currentRightPinch = gestureState.rightHand?.isPinching ?? false;
     
-    // Helper to get screen coordinates for click events (scaled and mirrored to match cursor display)
+    // Helper to get screen coordinates for click events (relative to graph container)
     const getScreenCoords = (rawPos: { x: number; y: number }) => {
       const scaled = scalePosition(rawPos);
-      // Mirror X axis to match cursor display, and convert to screen pixels
+      // Get the graph container's bounding rect
+      const containerRect = graphContainerRef.current?.getBoundingClientRect();
+      if (containerRect) {
+        // Mirror X axis and convert to screen pixels relative to container
+        return {
+          x: containerRect.left + (1 - scaled.x) * containerRect.width,
+          y: containerRect.top + scaled.y * containerRect.height
+        };
+      }
+      // Fallback to window coordinates
       return {
         x: (1 - scaled.x) * window.innerWidth,
         y: scaled.y * window.innerHeight
@@ -349,27 +362,32 @@ const Results: React.FC = () => {
     // Left hand pinch state change
     if (currentLeftPinch !== prevLeftPinchRef.current) {
       if (currentLeftPinch) {
-        // Pinch started - simulate click at cursor position
-        console.log('[Results] Left hand pinch started - clicking');
-        // Dispatch a click event at the scaled cursor position
+        // Pinch started - select node at cursor position
+        const scaled = scalePosition(gestureState.leftHand!.position);
+        // The cursor display uses (1 - scaled.x) for mirroring, so we pass that
+        const normX = 1 - scaled.x;
+        const normY = scaled.y;
+        
+        // Show click indicator at screen position
         const coords = getScreenCoords(gestureState.leftHand!.position);
-        const clickEvent = new MouseEvent('click', {
-          bubbles: true,
-          cancelable: true,
-          clientX: coords.x,
-          clientY: coords.y
-        });
-        document.elementFromPoint(coords.x, coords.y)?.dispatchEvent(clickEvent);
+        console.log(`[Results] Left hand pinch - normalized (${normX.toFixed(3)}, ${normY.toFixed(3)})`);
+        setClickIndicator({ x: coords.x, y: coords.y });
+        setTimeout(() => setClickIndicator(null), 500);
+        
+        // Directly select node at position
+        if (graphDisplayRef.current) {
+          console.log('[Results] Calling selectNodeAtPosition on graphDisplayRef');
+          const result = graphDisplayRef.current.selectNodeAtPosition(normX, normY);
+          console.log('[Results] selectNodeAtPosition result:', result);
+        } else {
+          console.log('[Results] ERROR: graphDisplayRef.current is null!');
+        }
       } else {
-        // Pinch ended - simulate escape
-        console.log('[Results] Left hand pinch ended - pressing escape');
-        const escapeEvent = new KeyboardEvent('keydown', {
-          key: 'Escape',
-          code: 'Escape',
-          bubbles: true,
-          cancelable: true
-        });
-        document.dispatchEvent(escapeEvent);
+        // Pinch ended - close modal if open
+        console.log('[Results] Left hand pinch ended - closing modal');
+        if (graphDisplayRef.current) {
+          graphDisplayRef.current.closeModal();
+        }
       }
       prevLeftPinchRef.current = currentLeftPinch;
       setLeftPinching(currentLeftPinch);
@@ -378,26 +396,32 @@ const Results: React.FC = () => {
     // Right hand pinch state change
     if (currentRightPinch !== prevRightPinchRef.current) {
       if (currentRightPinch) {
-        // Pinch started - simulate click at cursor position
-        console.log('[Results] Right hand pinch started - clicking');
+        // Pinch started - select node at cursor position
+        const scaled = scalePosition(gestureState.rightHand!.position);
+        // The cursor display uses (1 - scaled.x) for mirroring, so we pass that
+        const normX = 1 - scaled.x;
+        const normY = scaled.y;
+        
+        // Show click indicator at screen position
         const coords = getScreenCoords(gestureState.rightHand!.position);
-        const clickEvent = new MouseEvent('click', {
-          bubbles: true,
-          cancelable: true,
-          clientX: coords.x,
-          clientY: coords.y
-        });
-        document.elementFromPoint(coords.x, coords.y)?.dispatchEvent(clickEvent);
+        console.log(`[Results] Right hand pinch - normalized (${normX.toFixed(3)}, ${normY.toFixed(3)})`);
+        setClickIndicator({ x: coords.x, y: coords.y });
+        setTimeout(() => setClickIndicator(null), 500);
+        
+        // Directly select node at position
+        if (graphDisplayRef.current) {
+          console.log('[Results] Calling selectNodeAtPosition on graphDisplayRef (right)');
+          const result = graphDisplayRef.current.selectNodeAtPosition(normX, normY);
+          console.log('[Results] selectNodeAtPosition result (right):', result);
+        } else {
+          console.log('[Results] ERROR: graphDisplayRef.current is null! (right)');
+        }
       } else {
-        // Pinch ended - simulate escape
-        console.log('[Results] Right hand pinch ended - pressing escape');
-        const escapeEvent = new KeyboardEvent('keydown', {
-          key: 'Escape',
-          code: 'Escape',
-          bubbles: true,
-          cancelable: true
-        });
-        document.dispatchEvent(escapeEvent);
+        // Pinch ended - close modal if open
+        console.log('[Results] Right hand pinch ended - closing modal');
+        if (graphDisplayRef.current) {
+          graphDisplayRef.current.closeModal();
+        }
       }
       prevRightPinchRef.current = currentRightPinch;
       setRightPinching(currentRightPinch);
@@ -1010,7 +1034,7 @@ const Results: React.FC = () => {
         </Paper>
 
         {/* Right Panel - Graph Display */}
-        <Box sx={{ flex: 1, position: 'relative', height: '100%' }}>
+        <Box ref={graphContainerRef} sx={{ flex: 1, position: 'relative', height: '100%' }}>
           <GraphDisplay 
             ref={graphDisplayRef}
             graph={largeGraph}
@@ -1068,6 +1092,35 @@ const Results: React.FC = () => {
                     </IconButton>
                 </Stack>
              </Paper>
+          )}
+
+          {/* Debug Click Indicator */}
+          {clickIndicator && (
+            <Box
+              sx={{
+                position: 'fixed',
+                left: clickIndicator.x,
+                top: clickIndicator.y,
+                transform: 'translate(-50%, -50%)',
+                pointerEvents: 'none',
+                zIndex: 2000,
+              }}
+            >
+              <Box
+                sx={{
+                  width: 30,
+                  height: 30,
+                  borderRadius: '50%',
+                  border: '3px solid #00FF00',
+                  bgcolor: 'rgba(0, 255, 0, 0.3)',
+                  animation: 'clickPulse 0.5s ease-out',
+                  '@keyframes clickPulse': {
+                    '0%': { transform: 'scale(1)', opacity: 1 },
+                    '100%': { transform: 'scale(2)', opacity: 0 },
+                  },
+                }}
+              />
+            </Box>
           )}
 
           {/* Hand Cursor Overlays */}
