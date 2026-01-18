@@ -162,7 +162,7 @@ const Landing: React.FC = () => {
 
         // 4. Generate Graph & Store & Navigate
         if (fileToProcess) {
-             await generateAndStoreGraph(fileToProcess, dispatch, navigate);
+             await generateAndStoreGraph(fileToProcess, dispatch, navigate, apiKey);
              // generateAndStoreGraph handles dispatching setGraph, setName and navigating
              // It also handles errors for graph generation
         }
