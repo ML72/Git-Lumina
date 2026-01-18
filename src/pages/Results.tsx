@@ -1,4 +1,4 @@
-import React, { useState, useRef, useCallback, useEffect, useCallback, useEffect, useRef } from 'react';
+import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { 
   Box, 
   Typography, 
@@ -11,15 +11,13 @@ import {
   InputAdornment, 
   IconButton, 
   Chip,
+  Stack,
   Avatar,
   useTheme,
   alpha,
   Fab,
   Tooltip,
-  Collapse,
-  Button,
-  Tooltip,
-  Collapse,
+  Collapse
 } from '@mui/material';
 import { 
   Send as SendIcon, 
@@ -33,34 +31,29 @@ import {
   Visibility as VisibilityIcon,
   VisibilityOff as VisibilityOffIcon,
   CenterFocusStrong as ResetIcon
-  ChevronLeft as ChevronLeftIcon,
-  ChevronRight as ChevronRightIcon,
-  PlayArrow as PlayArrowIcon,
-  School as SchoolIcon,
-  Map as MapIcon,
-  Search as SearchIcon,
-  CheckCircle as CheckCircleIcon,
-  RadioButtonUnchecked as UncheckedIcon,
-  HelpOutline as HelpIcon,
-  ExpandLess,
-  ExpandMore,
-  Lightbulb as LightbulbIcon
 } from '@mui/icons-material';
 import CustomPage from '../components/CustomPage';
 import GraphDisplay, { GraphDisplayRef } from '../components/GraphDisplay';
 import Webcam, { GestureState } from '../components/Webcam';
 import useGestureControls, { GestureControlState } from '../hooks/useGestureControls';
 
-// Mock Data for the Socratic Guide
+// Mock Data
 const MOCK_CHAT = [
-  { id: 1, sender: 'system', text: 'Welcome to the Git Lumina explorer! I am your guide. Shall we start by looking at the entry point of the application?' },
+  { id: 1, sender: 'user', text: 'How is the user authentication implemented?' },
+  { id: 2, sender: 'system', text: 'User authentication is primarily handled in `src/auth/AuthProvider.tsx`. It uses a custom hook `useAuth` to manage session state and integrates with the backend API endpoints defined in `src/api/auth.ts`.' },
+  { id: 3, sender: 'user', text: 'What is the structure of the Redux store?' },
+  { id: 4, sender: 'system', text: 'The Redux store is configured in `src/store/index.ts`. It uses Redux Toolkit slices, which are organized in the `src/store/slices` directory. The main slices are `userSlice`, `notificationSlice`, and `repoSlice`.' },
 ];
 
-const SUGGESTED_QUESTIONS = [
-    "How does authentication work?", 
-    "Where is the API client?",
-    "Explain the project structure"
-];
+const MOCK_INFO = {
+  name: "project-repository",
+  stats: {
+    files: 142,
+    components: 28,
+    linesOfCode: 15420
+  },
+  layers: ['Presentation', 'Business Logic', 'Data Access']
+};
 
 const Results: React.FC = () => {
   const theme = useTheme();
@@ -139,82 +132,6 @@ const Results: React.FC = () => {
       graphDisplayRef.current.resetView();
     }
   }, []);
-  const [chat, setChat] = useState(MOCK_CHAT);
-  
-  const messagesEndRef = useRef<null | HTMLDivElement>(null);
-
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  };
-
-  useEffect(() => {
-    scrollToBottom();
-  }, [chat]);
-
-  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
-  const [sidebarWidth, setSidebarWidth] = useState(320);
-  const [isResizing, setIsResizing] = useState(false);
-  
-  // Sections State - Accordion Logic
-  const [activeSection, setActiveSection] = useState<'insights' | 'quests' | 'cortex' | null>('insights');
-  
-  // State for Quests
-  const [activeQuestId, setActiveQuestId] = useState<number>(1); 
-  const [quests, setQuests] = useState([
-    { id: 1, title: 'The Entry Point', description: 'Find where the app starts execution.', completed: false },
-    { id: 2, title: 'Data Flow', description: 'Trace how data moves through the app.', completed: false },
-    { id: 3, title: 'Authentication', description: 'Discover how users log in.', completed: false },
-  ]);
-
-  const toggleQuestCompletion = (id: number) => {
-    setQuests(prev => prev.map(q => q.id === id ? { ...q, completed: !q.completed } : q));
-  };
-
-  const handleSuggestedQuestion = (text: string) => {
-      setChat(prev => [...prev, { id: Date.now(), sender: 'user', text }]);
-      // Simulate response for better UX
-      setTimeout(() => {
-          setChat(prev => [...prev, { id: Date.now() + 1, sender: 'system', text: `Analyzing ${text.toLowerCase()}... (Simulation)` }]);
-      }, 800);
-      setQuery('');
-  };
-
-  const handleSectionToggle = (section: 'insights' | 'quests' | 'cortex') => {
-      if (activeSection === section) {
-        setActiveSection(null);
-      } else {
-        setActiveSection(section);
-        if (!isSidebarOpen) {
-            setIsSidebarOpen(true);
-        }
-      }
-  };
-
-  // Resize Handlers
-  const startResizing = useCallback(() => setIsResizing(true), []);
-  const stopResizing = useCallback(() => setIsResizing(false), []);
-  
-  const resize = useCallback((mouseMoveEvent: MouseEvent) => {
-      if (isResizing) {
-          const newWidth = mouseMoveEvent.clientX;
-          if (newWidth > 260 && newWidth < 600) {
-              setSidebarWidth(newWidth);
-          }
-      }
-  }, [isResizing]);
-
-  useEffect(() => {
-      if (isResizing) {
-          window.addEventListener("mousemove", resize);
-          window.addEventListener("mouseup", stopResizing);
-      }
-      return () => {
-          window.removeEventListener("mousemove", resize);
-          window.removeEventListener("mouseup", stopResizing);
-      };
-  }, [isResizing, resize, stopResizing]);
-
-  const currentWidth = isSidebarOpen ? sidebarWidth : 64;
 
   return (
     <CustomPage>
@@ -225,457 +142,333 @@ const Results: React.FC = () => {
         position: 'relative'
       }}>
         
-        {/* Left Panel - Tour Guide Sidebar */}
+        {/* Left Panel - Sidebar */}
         <Paper 
-          elevation={0}
+          elevation={3}
           sx={{ 
-            width: currentWidth, 
+            width: 400, 
             height: '100%', 
             display: 'flex', 
             flexDirection: 'column', 
             zIndex: 10,
             borderRadius: 0,
-            borderRight: '1px solid rgba(255,255,255,0.08)',
-            bgcolor: 'rgba(13, 17, 23, 0.85)',
-            backdropFilter: 'blur(12px)',
-            transition: isResizing ? 'none' : 'width 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
-            overflow: 'hidden',
-            flexShrink: 0,
-            whiteSpace: 'nowrap',
-            position: 'relative',
-            boxShadow: '4px 0 24px rgba(0,0,0,0.4)'
+            borderRight: `1px solid ${theme.palette.divider}`,
+            bgcolor: 'background.paper'
           }}
         >
-            {/* Ambient Background Glows */}
-            <Box sx={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, overflow: 'hidden', pointerEvents: 'none', zIndex: 0 }}>
-                <Box sx={{
-                    position: 'absolute',
-                    top: '-10%',
-                    left: '-20%',
-                    width: '400px',
-                    height: '400px',
-                    background: 'radial-gradient(circle, rgba(88, 166, 255, 0.08) 0%, rgba(0,0,0,0) 70%)',
-                    filter: 'blur(60px)',
-                    opacity: 0.8
-                }} />
-                <Box sx={{
-                    position: 'absolute',
-                    bottom: '20%',
-                    right: '-10%',
-                    width: '300px',
-                    height: '300px',
-                    background: 'radial-gradient(circle, rgba(163, 113, 247, 0.06) 0%, rgba(0,0,0,0) 70%)',
-                    filter: 'blur(60px)',
-                    opacity: 0.8
-                }} />
+          {/* Header Section */}
+          <Box sx={{ p: 3, borderBottom: `1px solid ${theme.palette.divider}` }}>
+            <Typography variant="h5" fontWeight="bold" gutterBottom>
+              {MOCK_INFO.name}
+            </Typography>
+            <Stack direction="row" spacing={1} mb={2}>
+              <Chip label="TypeScript" size="small" color="primary" variant="outlined" />
+              <Chip label="React" size="small" color="secondary" variant="outlined" />
+              <Chip label="v1.0.2" size="small" variant="outlined" />
+            </Stack>
+            
+            <Stack direction="row" spacing={3} sx={{ color: 'text.secondary' }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                <FileIcon fontSize="small" />
+                <Typography variant="body2">{MOCK_INFO.stats.files} Files</Typography>
+              </Box>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                <CodeIcon fontSize="small" />
+                <Typography variant="body2">{(MOCK_INFO.stats.linesOfCode / 1000).toFixed(1)}k LOC</Typography>
+              </Box>
+            </Stack>
+          </Box>
+
+          {/* Scrollable Content Area */}
+          <Box sx={{ 
+            flex: 1, 
+            overflowY: 'auto', 
+            display: 'flex', 
+            flexDirection: 'column' 
+          }}>
+            
+            {/* General Info */}
+            <Box sx={{ p: 3 }}>
+              <Typography variant="subtitle1" fontWeight="bold" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                <InfoIcon fontSize="small" color="primary" />
+                Repository Insights
+              </Typography>
+              <Typography variant="body2" color="text.secondary" paragraph>
+                This codebase follows a standard React architecture separated by feature slices. The component hierarchy is well-structured with clear separation between container and presentational components.
+              </Typography>
+              
+              <Typography variant="subtitle2" gutterBottom>Detected Layers:</Typography>
+              <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
+                {MOCK_INFO.layers.map(layer => (
+                  <Chip key={layer} label={layer} size="small" sx={{ bgcolor: alpha(theme.palette.primary.main, 0.1) }} />
+                ))}
+              </Box>
             </Box>
 
-            {/* Resizer Handle */}
-            <Box
-                onMouseDown={startResizing}
-                sx={{
-                    position: 'absolute',
-                    top: 0,
-                    right: 0,
-                    width: 4,
-                    height: '100%',
-                    cursor: 'col-resize',
-                    zIndex: 20,
-                    opacity: 0,
-                    '&:hover': { opacity: 1, bgcolor: 'primary.main', boxShadow: '0 0 10px #79c0ff' },
-                    active: { opacity: 1, bgcolor: 'primary.main' }
-                }}
-            />
+            <Divider />
 
-            {/* 1. Header & Toggle */}
-            <Box sx={{ 
-                p: 2, 
-                display: 'flex', 
-                alignItems: 'center', 
-                justifyContent: isSidebarOpen ? 'space-between' : 'center',
-                borderBottom: '1px solid rgba(255,255,255,0.06)',
-                minHeight: 80, 
-                width: '100%',
-                boxSizing: 'border-box',
-                position: 'relative',
-                zIndex: 1,
-                background: 'linear-gradient(180deg, rgba(255,255,255,0.03) 0%, rgba(255,255,255,0) 100%)'
-            }}>
-                {isSidebarOpen ? (
-                   <Box sx={{ overflow: 'hidden', mr: 1, minWidth: 200 }}>
-                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
-                            <Box sx={{ 
-                                p: 0.5, 
-                                borderRadius: 1, 
-                                background: 'linear-gradient(135deg, rgba(88, 166, 255, 0.2), rgba(163, 113, 247, 0.2))',
-                                display: 'flex' 
-                            }}>
-                                <MapIcon sx={{ color: '#79c0ff' }} />
-                            </Box>
-                            <Typography variant="h6" fontWeight="800" noWrap sx={{ 
-                                background: 'linear-gradient(90deg, #fff, #d0d7de)', 
-                                WebkitBackgroundClip: 'text',
-                                WebkitTextFillColor: 'transparent',
-                                letterSpacing: '-0.5px'
-                            }}>
-                                Git Lumina
-                            </Typography>
-                        </Box>
-                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                             <Typography variant="body2" fontWeight="bold" sx={{ color: '#79c0ff', fontSize: '0.9rem', letterSpacing: 0.5 }}>
-                                facebook/react
-                             </Typography>
-                             <Chip 
-                                label="TypeScript" 
-                                size="small" 
-                                sx={{ 
-                                    height: 18, 
-                                    fontSize: '0.65rem', 
-                                    bgcolor: 'rgba(121, 192, 255, 0.15)', 
-                                    color: '#79c0ff',
-                                    fontWeight: 'bold',
-                                    border: '1px solid rgba(121, 192, 255, 0.3)'
-                                }} 
-                            />
-                        </Box>
-                        <Typography variant="caption" sx={{ display: 'block', mt: 0.5, color: 'rgba(208, 215, 222, 0.6)' }}>
-                            154 Files • 12k LoC • v18.2.0
-                        </Typography>
-                    </Box>
-                ) : (
-                    <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-                         <MapIcon color="primary" fontSize="large" />
-                    </Box>
-                )}
-                
-                {isSidebarOpen && (
-                    <IconButton 
-                        onClick={() => setIsSidebarOpen(false)} 
-                        size="small" 
-                        sx={{ color: 'rgba(255,255,255,0.4)', '&:hover': { color: '#fff', bgcolor: 'rgba(255,255,255,0.1)' } }}
-                    >
-                        <ChevronLeftIcon />
+            {/* Chat Section Header */}
+            <Box sx={{ px: 3, pt: 2, pb: 1 }}>
+              <Typography variant="subtitle1" fontWeight="bold">
+                Cortex AI Assistant
+              </Typography>
+              <Typography variant="caption" color="text.secondary">
+                Ask questions about the codebase structure and dependencies.
+              </Typography>
+            </Box>
+
+            {/* Chat Messages */}
+            <List sx={{ px: 2, pb: 2 }}>
+              {MOCK_CHAT.map((msg) => (
+                <ListItem key={msg.id} alignItems="flex-start" sx={{ mb: 1 }}>
+                  <Box sx={{ mr: 2, mt: 1 }}>
+                    {msg.sender === 'system' ? (
+                      <Avatar sx={{ width: 32, height: 32, bgcolor: theme.palette.primary.main }}>
+                        <BotIcon fontSize="small" />
+                      </Avatar>
+                    ) : (
+                      <Avatar sx={{ width: 32, height: 32, bgcolor: theme.palette.secondary.main }}>
+                        <PersonIcon fontSize="small" />
+                      </Avatar>
+                    )}
+                  </Box>
+                  <Paper sx={{ 
+                    p: 2, 
+                    bgcolor: msg.sender === 'system' ? alpha(theme.palette.background.default, 0.5) : alpha(theme.palette.primary.main, 0.1),
+                    borderRadius: 2,
+                    maxWidth: '100%'
+                  }}>
+                    <ListItemText 
+                      primary={msg.sender === 'user' ? 'You' : 'Cortex AI'}
+                      primaryTypographyProps={{ variant: 'caption', color: 'text.secondary', mb: 0.5, display: 'block' }}
+                      secondary={msg.text}
+                      secondaryTypographyProps={{ variant: 'body2', color: 'text.primary' }}
+                    />
+                  </Paper>
+                </ListItem>
+              ))}
+            </List>
+          </Box>
+
+          {/* Chat Input Area - Fixed at bottom of sidebar */}
+          <Box sx={{ p: 2, borderTop: `1px solid ${theme.palette.divider}`, bgcolor: 'background.paper' }}>
+            <TextField
+              fullWidth
+              size="small"
+              placeholder="Ask about this repo..."
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              InputProps={{
+                endAdornment: (
+                  <InputAdornment position="end">
+                    <IconButton edge="end" color="primary">
+                      <SendIcon />
                     </IconButton>
-                )}
-            </Box>
-
-            {/* Content Container - Hide if collapsed */}
-            {isSidebarOpen ? (
-                <Box sx={{ 
-                    flex: 1, 
-                    display: 'flex', 
-                    flexDirection: 'column', 
-                    overflowY: 'hidden',
-                    minWidth: sidebarWidth, 
-                    position: 'relative',
-                    zIndex: 1,
-                }}>
-                    
-                    {/* 2. Repository Insight Section */}
-                    <Box sx={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
-                        <Box 
-                            sx={{ p: 2, display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer', '&:hover': { bgcolor: 'rgba(255,255,255,0.03)' } }}
-                            onClick={() => handleSectionToggle('insights')}
-                        >
-                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                                <PlayArrowIcon fontSize="small" sx={{ color: activeSection === 'insights' ? '#79c0ff' : 'rgba(255,255,255,0.5)' }} />
-                                <Typography variant="subtitle2" fontWeight="bold" sx={{ color: activeSection === 'insights' ? '#79c0ff' : 'rgba(255,255,255,0.7)', letterSpacing: '0.5px' }}>
-                                    REPOSITORY INSIGHTS
-                                </Typography>
-                            </Box>
-                            {activeSection === 'insights' ? <ExpandLess fontSize="small" sx={{ color: 'rgba(255,255,255,0.5)' }} /> : <ExpandMore fontSize="small" sx={{ color: 'rgba(255,255,255,0.5)' }} />}
-                        </Box>
-                        
-                        <Collapse in={activeSection === 'insights'}>
-                            <Box sx={{ px: 2, pb: 2 }}>
-                                <Typography variant="body2" paragraph sx={{ whiteSpace: 'normal', color: 'rgba(255,255,255,0.7)' }}>
-                                    This looks like a standard React project with Vite. The component hierarchy is well-structured with clear separation between container and presentational components.
-                                </Typography>
-                                
-                                <Typography variant="caption" fontWeight="bold" sx={{ mt: 1, display: 'block', color: 'rgba(255,255,255,0.5)' }}>
-                                    DETECTED LAYERS
-                                </Typography>
-                                <Box sx={{ display: 'flex', gap: 1, mt: 1, flexWrap: 'wrap' }}>
-                                    <Chip label="Presentation" size="small" variant="outlined" sx={{ fontWeight: 'bold', borderColor: 'rgba(121, 192, 255, 0.4)', color: '#79c0ff', bgcolor: 'rgba(121, 192, 255, 0.1)' }} />
-                                    <Chip label="Business Logic" size="small" variant="outlined" sx={{ color: 'rgba(255,255,255,0.7)', borderColor: 'rgba(255,255,255,0.2)' }} />
-                                    <Chip label="Data Access" size="small" variant="outlined" sx={{ color: 'rgba(255,255,255,0.7)', borderColor: 'rgba(255,255,255,0.2)' }} />
-                                </Box>
-                            </Box>
-                        </Collapse>
-                    </Box>
-
-                    {/* 3. Quest / Onboarding Section */}
-                    <Box sx={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
-                        <Box 
-                            sx={{ p: 2, display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer', '&:hover': { bgcolor: 'rgba(255,255,255,0.03)' } }}
-                            onClick={() => handleSectionToggle('quests')}
-                        >
-                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                                <SchoolIcon fontSize="small" sx={{ color: activeSection === 'quests' ? '#79c0ff' : 'rgba(255,255,255,0.5)' }} />
-                                <Typography variant="subtitle2" fontWeight="bold" sx={{ color: activeSection === 'quests' ? '#79c0ff' : 'rgba(255,255,255,0.7)', letterSpacing: '0.5px' }}>
-                                    LEARNING QUESTS
-                                </Typography>
-                            </Box>
-                            {activeSection === 'quests' ? <ExpandLess fontSize="small" sx={{ color: 'rgba(255,255,255,0.5)' }} /> : <ExpandMore fontSize="small" sx={{ color: 'rgba(255,255,255,0.5)' }} />}
-                        </Box>
-                        
-                        <Collapse in={activeSection === 'quests'}>
-                            <Box sx={{ px: 2, pb: 2 }}>
-                                <Typography variant="caption" paragraph sx={{ whiteSpace: 'normal', display: 'block', color: 'rgba(255,255,255,0.5)' }}>
-                                    Follow the path to understand the architecture.
-                                </Typography>
-                                
-                                <List disablePadding>
-                                    {quests.map((quest) => (
-                                        <ListItem 
-                                            key={quest.id} 
-                                            sx={{ 
-                                                p: 1.5, 
-                                                mb: 1,
-                                                borderRadius: 2,
-                                                background: quest.completed 
-                                                    ? 'linear-gradient(90deg, rgba(46, 160, 67, 0.15) 0%, rgba(46, 160, 67, 0.05) 100%)'
-                                                    : (activeQuestId === quest.id 
-                                                        ? 'linear-gradient(90deg, rgba(88, 166, 255, 0.15) 0%, rgba(88, 166, 255, 0.05) 100%)' 
-                                                        : 'transparent'),
-                                                border: quest.completed 
-                                                    ? '1px solid rgba(46, 160, 67, 0.3)'
-                                                    : (activeQuestId === quest.id ? '1px solid rgba(88, 166, 255, 0.3)' : '1px solid transparent'),
-                                                cursor: 'pointer',
-                                                transition: 'all 0.2s ease',
-                                                '&:hover': { 
-                                                    transform: 'translateX(4px)',
-                                                    bgcolor: 'rgba(255,255,255,0.05)' 
-                                                }
-                                            }}
-                                            onClick={() => {
-                                                toggleQuestCompletion(quest.id);
-                                                setActiveQuestId(quest.id);
-                                            }}
-                                        >
-                                            <IconButton 
-                                                size="small" 
-                                                onClick={(e) => {
-                                                    e.stopPropagation();
-                                                    toggleQuestCompletion(quest.id);
-                                                }}
-                                                sx={{ mr: 1, p: 0.5 }}
-                                            >
-                                                {quest.completed ? 
-                                                    <CheckCircleIcon sx={{ color: '#3fb950', fontSize: 20 }} /> : 
-                                                    <UncheckedIcon sx={{ color: 'rgba(255,255,255,0.3)', fontSize: 20 }} /> 
-                                                }
-                                            </IconButton>
-                                            <ListItemText 
-                                                primary={quest.title}
-                                                primaryTypographyProps={{ variant: 'body2', fontWeight: activeQuestId === quest.id ? 700 : 400, color: quest.completed ? 'rgba(255,255,255,0.9)' : (activeQuestId === quest.id ? '#79c0ff' : 'rgba(255,255,255,0.7)') }}
-                                                secondary={quest.description}
-                                                secondaryTypographyProps={{ variant: 'caption', noWrap: true, display: 'block', color: 'rgba(255,255,255,0.5)' }}
-                                            />
-                                        </ListItem>
-                                    ))}
-                                </List>
-                            </Box>
-                        </Collapse>
-                    </Box>
-
-                    {/* 4. Cortex Interface - Expands to fill */}
-                    <Box sx={{ 
-                        flex: activeSection === 'cortex' ? 1 : 0, 
-                        display: 'flex', 
-                        flexDirection: 'column', 
-                        minHeight: 0, 
-                        transition: 'flex 0.3s'
-                    }}>
-                        <Box 
-                            sx={{ p: 2, display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer', borderBottom: activeSection === 'cortex' ? '1px solid rgba(255,255,255,0.06)' : 'none', '&:hover': { bgcolor: 'rgba(255,255,255,0.03)' } }}
-                             onClick={() => handleSectionToggle('cortex')}
-                        >
-                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                                <BotIcon fontSize="small" sx={{ color: activeSection === 'cortex' ? '#a371f7' : 'rgba(255,255,255,0.5)' }} />
-                                <Typography variant="subtitle2" fontWeight="bold" sx={{ color: activeSection === 'cortex' ? '#a371f7' : 'rgba(255,255,255,0.7)', letterSpacing: '0.5px' }}>
-                                    CORTEX
-                                </Typography>
-                            </Box>
-                             {activeSection === 'cortex' ? <ExpandMore fontSize="small" sx={{ color: 'rgba(255,255,255,0.5)', transform: 'rotate(180deg)' }} /> : <ExpandMore fontSize="small" sx={{ color: 'rgba(255,255,255,0.5)' }} />}
-                        </Box>
-                        
-                        {activeSection === 'cortex' && (
-                            <>
-                                {/* Messages Area */}
-                                <Box sx={{ 
-                                    flex: 1, 
-                                    overflowY: 'auto', 
-                                    p: 2,
-                                    '&::-webkit-scrollbar': { display: 'none' },
-                                    scrollbarWidth: 'none'
-                                }}>
-                                    {chat.map((msg) => (
-                                        <Box key={msg.id} sx={{ mb: 2, display: 'flex', gap: 1.5, flexDirection: msg.sender === 'user' ? 'row-reverse' : 'row' }}>
-                                            <Avatar sx={{ width: 32, height: 32, bgcolor: msg.sender === 'user' ? 'rgba(121, 192, 255, 0.2)' : 'rgba(163, 113, 247, 0.2)', border: msg.sender === 'user' ? '1px solid rgba(121, 192, 255, 0.3)' : '1px solid rgba(163, 113, 247, 0.3)' }}>
-                                                {msg.sender === 'user' ? <SchoolIcon sx={{ fontSize: 18, color: '#79c0ff' }} /> : <BotIcon sx={{ fontSize: 18, color: '#a371f7' }} />}
-                                            </Avatar>
-                                            <Paper sx={{ 
-                                                p: 2, 
-                                                bgcolor: msg.sender === 'user' ? 'rgba(121, 192, 255, 0.08)' : 'rgba(22, 27, 34, 0.6)', 
-                                                color: '#d0d7de',
-                                                borderRadius: msg.sender === 'user' ? '16px 4px 16px 16px' : '4px 16px 16px 16px', 
-                                                maxWidth: '85%',
-                                                boxShadow: '0 4px 20px rgba(0,0,0,0.1)',
-                                                border: msg.sender === 'user' ? '1px solid rgba(121, 192, 255, 0.2)' : '1px solid rgba(163, 113, 247, 0.1)',
-                                                backdropFilter: 'blur(4px)'
-                                            }}>
-                                                <Typography variant="body2" sx={{ lineHeight: 1.6, whiteSpace: 'normal', textShadow: '0 1px 2px rgba(0,0,0,0.5)' }}>{msg.text}</Typography>
-                                            </Paper>
-                                        </Box>
-                                    ))}
-                                    <div ref={messagesEndRef} />
-                                </Box>
-
-                                {/* Suggested Questions */}
-                                <Box sx={{ px: 2, pb: 2, display: 'flex', flexWrap: 'wrap', gap: 1 }}>
-                                    {SUGGESTED_QUESTIONS.map((q, i) => (
-                                        <Chip 
-                                            key={i} 
-                                            label={q} 
-                                            size="small" 
-                                            onClick={() => handleSuggestedQuestion(q)}
-                                            icon={<LightbulbIcon fontSize="small" style={{ color: '#fff' }} />}
-                                            sx={{ 
-                                                cursor: 'pointer', 
-                                                bgcolor: 'rgba(255,255,255,0.05)',
-                                                color: 'rgba(255,255,255,0.8)',
-                                                fontWeight: 500,
-                                                border: '1px solid rgba(255,255,255,0.1)',
-                                                backdropFilter: 'blur(4px)',
-                                                '&:hover': { bgcolor: 'rgba(255,255,255,0.1)', borderColor: 'rgba(255,255,255,0.2)' }
-                                            }}
-                                        />
-                                    ))}
-                                </Box>
-
-                                {/* Input Area */}
-                                <Box sx={{ p: 2, borderTop: '1px solid rgba(255,255,255,0.1)' }}>
-                                    <TextField
-                                        fullWidth
-                                        size="small"
-                                        placeholder="Ask Cortex..."
-                                        value={query}
-                                        onChange={(e) => setQuery(e.target.value)}
-                                        onKeyPress={(e) => {
-                                            if (e.key === 'Enter' && query.trim()) {
-                                                handleSuggestedQuestion(query);
-                                            }
-                                        }}
-                                        InputProps={{
-                                            endAdornment: (
-                                                <InputAdornment position="end">
-                                                    <IconButton 
-                                                        edge="end" 
-                                                        size="small" 
-                                                        sx={{ color: '#79c0ff', '&:hover': { bgcolor: 'rgba(121, 192, 255, 0.1)' } }}
-                                                        onClick={() => query.trim() && handleSuggestedQuestion(query)}
-                                                    >
-                                                        <SendIcon fontSize="small" />
-                                                    </IconButton>
-                                                </InputAdornment>
-                                            ),
-                                            sx: { 
-                                                borderRadius: 4, 
-                                                fontSize: '0.875rem',
-                                                bgcolor: 'rgba(255,255,255,0.05)',
-                                                color: '#fff',
-                                                '& fieldset': { borderColor: 'rgba(255,255,255,0.1)' },
-                                                '&:hover fieldset': { borderColor: 'rgba(255,255,255,0.2) !important' },
-                                                '&.Mui-focused fieldset': { borderColor: '#79c0ff !important' },
-                                                input: { '&::placeholder': { color: 'rgba(255,255,255,0.4)', opacity: 1 } }
-                                            }
-                                        }}
-                                    />
-                                </Box>
-                            </>
-                        )}
-                    </Box>
-
-                </Box>
-            ) : (
-                // Collapsed State Icons
-                <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, pt: 3 }}>
-                    <Tooltip title="Repository Insights" placement="right">
-                        <IconButton 
-                            onClick={() => handleSectionToggle('insights')}
-                            sx={{ color: '#79c0ff', '&:hover': { bgcolor: 'rgba(121, 192, 255, 0.1)' } }}
-                        >
-                            <PlayArrowIcon />
-                        </IconButton>
-                    </Tooltip>
-                    <Tooltip title="Learning Quests" placement="right">
-                        <IconButton 
-                            onClick={() => handleSectionToggle('quests')}
-                            sx={{ color: '#79c0ff', '&:hover': { bgcolor: 'rgba(121, 192, 255, 0.1)' } }}
-                        >
-                            <SchoolIcon />
-                        </IconButton>
-                    </Tooltip>
-                    <Tooltip title="Cortex" placement="right">
-                        <IconButton 
-                            onClick={() => handleSectionToggle('cortex')}
-                            sx={{ color: '#a371f7', '&:hover': { bgcolor: 'rgba(163, 113, 247, 0.1)' } }}
-                        >
-                            <BotIcon />
-                        </IconButton>
-                    </Tooltip>
-                </Box>
-            )}
+                  </InputAdornment>
+                ),
+              }}
+            />
+          </Box>
         </Paper>
 
-        {/* Right Panel - Graph Display & Search Overlay */}
+        {/* Right Panel - Graph Display */}
         <Box sx={{ flex: 1, position: 'relative', height: '100%' }}>
-            {/* Natural Language Search Overlay */}
-            <Box sx={{ 
+          <GraphDisplay 
+            ref={graphDisplayRef}
+            isGestureActive={webcamEnabled && activeHandCount > 0}
+          />
+          
+          {/* Webcam Preview (Picture-in-Picture style) - Always visible in bottom right */}
+          <Collapse in={webcamVisible}>
+            <Box 
+              sx={{ 
                 position: 'absolute', 
-                top: 24, 
-                left: '50%', 
-                transform: 'translateX(-50%)', 
+                bottom: 100, 
+                right: 20, 
+                width: 320,
+                height: 240,
+                borderRadius: 2,
+                overflow: 'hidden',
+                boxShadow: '0 8px 32px rgba(0,0,0,0.4)',
+                border: `2px solid ${webcamEnabled ? 'rgba(78, 205, 196, 0.5)' : 'rgba(255,255,255,0.1)'}`,
                 zIndex: 100,
-                width: '100%',
-                maxWidth: 500
-            }}>
-                <Paper
-                    elevation={4}
-                    sx={{
-                        p: '2px 4px',
-                        display: 'flex',
-                        alignItems: 'center',
-                        borderRadius: 20,
-                        border: '1px solid rgba(255,255,255,0.1)',
-                        bgcolor: 'rgba(22, 27, 34, 0.8)',
-                        backdropFilter: 'blur(16px)',
-                        boxShadow: '0 8px 32px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(255, 255, 255, 0.05)'
-                    }}
-                >
-                    <IconButton sx={{ p: '10px', color: '#79c0ff' }} aria-label="menu">
-                        <SearchIcon />
-                    </IconButton>
-                    <TextField 
-                        variant="standard"
-                        placeholder="Find functions, files, or patterns..." 
-                        InputProps={{ disableUnderline: true }}
-                        sx={{ 
-                            ml: 1, 
-                            flex: 1, 
-                            input: { color: 'white', '&::placeholder': { color: 'rgba(255,255,255,0.5)', opacity: 1 } } 
-                        }}
-                    />
-                    <Chip 
-                        label="⌘ K" 
-                        size="small" 
-                        sx={{ mr: 1, bgcolor: 'rgba(255,255,255,0.1)', color: '#8b949e', height: 20, fontSize: '0.625rem' }} 
-                    />
-                </Paper>
+                transition: 'border-color 0.3s ease'
+              }}
+            >
+              <Webcam 
+                onGestureUpdate={webcamEnabled ? handleGestureUpdate : () => {}}
+                showVideo={true}
+                showOverlay={true}
+              />
+              {/* Gesture control status indicator */}
+              <Box
+                sx={{
+                  position: 'absolute',
+                  top: 8,
+                  right: 8,
+                  bgcolor: webcamEnabled ? 'rgba(78, 205, 196, 0.9)' : 'rgba(100, 100, 100, 0.9)',
+                  color: '#fff',
+                  px: 1,
+                  py: 0.5,
+                  borderRadius: 1,
+                  fontSize: '10px',
+                  fontWeight: 'bold',
+                  textTransform: 'uppercase'
+                }}
+              >
+                {webcamEnabled ? '● Controls Active' : '○ Controls Off'}
+              </Box>
             </Box>
-
-           <GraphDisplay />
+          </Collapse>
+          
+          {/* Floating Controls */}
+          <Box sx={{ 
+            position: 'absolute', 
+            bottom: 20, 
+            right: 20, 
+            zIndex: 100,
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 1
+          }}>
+            {/* Toggle webcam visibility */}
+            <Tooltip title={webcamVisible ? "Hide webcam preview" : "Show webcam preview"} placement="left">
+              <Fab 
+                size="small" 
+                color="default"
+                onClick={() => setWebcamVisible(!webcamVisible)}
+                sx={{ 
+                  bgcolor: 'background.paper',
+                  '&:hover': { bgcolor: alpha(theme.palette.primary.main, 0.1) }
+                }}
+              >
+                {webcamVisible ? <VisibilityOffIcon /> : <VisibilityIcon />}
+              </Fab>
+            </Tooltip>
+            
+            {/* Reset view button */}
+            <Tooltip title="Reset view" placement="left">
+              <Fab 
+                size="small" 
+                color="default"
+                onClick={handleResetView}
+                sx={{ 
+                  bgcolor: 'background.paper',
+                  '&:hover': { bgcolor: alpha(theme.palette.primary.main, 0.1) }
+                }}
+              >
+                <ResetIcon />
+              </Fab>
+            </Tooltip>
+            
+            {/* Toggle webcam on/off */}
+            <Tooltip title={webcamEnabled ? "Disable gesture controls" : "Enable gesture controls"} placement="left">
+              <Fab 
+                color={webcamEnabled ? "primary" : "default"}
+                onClick={() => setWebcamEnabled(!webcamEnabled)}
+                sx={{ 
+                  bgcolor: webcamEnabled ? theme.palette.primary.main : 'background.paper',
+                  '&:hover': { 
+                    bgcolor: webcamEnabled 
+                      ? theme.palette.primary.dark 
+                      : alpha(theme.palette.primary.main, 0.1) 
+                  }
+                }}
+              >
+                {webcamEnabled ? <VideocamIcon /> : <VideocamOffIcon />}
+              </Fab>
+            </Tooltip>
+          </Box>
+          
+          {/* Gesture Control Instructions (shown when webcam is visible and controls are enabled) */}
+          {webcamVisible && webcamEnabled && (
+            <Box 
+              sx={{ 
+                position: 'absolute', 
+                top: 20, 
+                left: 20, 
+                zIndex: 100,
+                bgcolor: alpha(theme.palette.background.paper, 0.9),
+                borderRadius: 2,
+                p: 2,
+                maxWidth: 280,
+                boxShadow: '0 4px 20px rgba(0,0,0,0.2)'
+              }}
+            >
+              <Typography variant="subtitle2" fontWeight="bold" gutterBottom>
+                🖐️ Gesture Controls
+              </Typography>
+              <Typography variant="caption" component="div" color="text.secondary">
+                <Box component="ul" sx={{ m: 0, pl: 2 }}>
+                  <li><strong>Close one hand:</strong> Rotate/Pan the graph</li>
+                  <li><strong>Close both hands:</strong> Pinch to zoom + pan</li>
+                  <li><strong>Open hands:</strong> Release control</li>
+                </Box>
+              </Typography>
+              <Divider sx={{ my: 1 }} />
+              <Typography variant="caption" color="text.secondary">
+                Your arm span calibrates sensitivity automatically.
+              </Typography>
+            </Box>
+          )}
+          
+          {/* Active Mode Indicator - Large visual feedback */}
+          {webcamEnabled && (
+            <Box
+              sx={{
+                position: 'absolute',
+                top: 20,
+                left: '50%',
+                transform: 'translateX(-50%)',
+                zIndex: 100,
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                gap: 1
+              }}
+            >
+              {/* Mode Badge */}
+              <Box
+                sx={{
+                  px: 3,
+                  py: 1.5,
+                  borderRadius: 3,
+                  bgcolor: gestureMode === 'idle' 
+                    ? 'rgba(100, 100, 100, 0.9)' 
+                    : gestureMode === 'one-hand-pan' 
+                      ? 'rgba(255, 107, 107, 0.9)' 
+                      : 'rgba(78, 205, 196, 0.9)',
+                  color: '#fff',
+                  fontWeight: 'bold',
+                  fontSize: '1.1rem',
+                  boxShadow: gestureMode !== 'idle' ? '0 0 20px rgba(255,255,255,0.3)' : 'none',
+                  transition: 'all 0.2s ease',
+                  textTransform: 'uppercase',
+                  letterSpacing: 1
+                }}
+              >
+                {gestureMode === 'idle' && '👐 HANDS OPEN'}
+                {gestureMode === 'one-hand-pan' && '✊ PAN MODE'}
+                {gestureMode === 'two-hand-zoom' && '🤏 ZOOM MODE'}
+              </Box>
+              
+              {/* Hand count indicator */}
+              <Typography 
+                variant="caption" 
+                sx={{ 
+                  color: '#fff', 
+                  bgcolor: 'rgba(0,0,0,0.6)', 
+                  px: 2, 
+                  py: 0.5, 
+                  borderRadius: 1 
+                }}
+              >
+                Active hands: {activeHandCount} | 
+                L: {cursors.left ? (cursors.left.isActive ? '✊ CLOSED' : '✋ OPEN') : '❌'} | 
+                R: {cursors.right ? (cursors.right.isActive ? '✊ CLOSED' : '✋ OPEN') : '❌'}
+              </Typography>
+            </Box>
+          )}
         </Box>
 
       </Box>
