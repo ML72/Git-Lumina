@@ -102,7 +102,7 @@ const Results: React.FC = () => {
   const graph = useSelector(selectGraph);
   const repoName = useSelector(selectName);
   const apiKey = useSelector(selectOpenAiKey);
-  const [webcamEnabled, setWebcamEnabled] = useState(true);
+  const [webcamEnabled, setWebcamEnabled] = useState(false);
   const [permissionDenied, setPermissionDenied] = useState(false);
   const [autoRotateEnabled, setAutoRotateEnabled] = useState(true);
   const [clickEnabled] = useState(false);
