@@ -454,11 +454,22 @@ const Results: React.FC = () => {
   };
 
   const handleSectionToggle = (section: 'repository' | 'quests' | 'cortex' | 'categories') => {
-      // Always reset view and dismiss hints when toggling sections
-      if (graphDisplayRef.current) {
-        graphDisplayRef.current.resetView();
-      }
+      // Dismiss hints when toggling sections
       setActiveHint(null);
+
+      // Determine importance of resetting view
+      // We reset if:
+      // 1. We are closing the current section (returning to default state)
+      // 2. We are opening a section that is NOT 'quests' (likely want default view)
+      // We explicitly DO NOT reset when OPENING 'quests', as this is a frequent action where user might
+      // want to preserve context or just browse the list before clicking a specific quest.
+      
+      const isClosing = activeSection === section;
+      const isOpeningQuests = !isClosing && section === 'quests';
+      
+      if (!isOpeningQuests && graphDisplayRef.current) {
+         graphDisplayRef.current.resetView(); 
+      }
 
     if (activeSection === section) {
       setActiveSection('');
@@ -1002,6 +1013,7 @@ const Results: React.FC = () => {
         <Box sx={{ flex: 1, position: 'relative', height: '100%' }}>
           <GraphDisplay 
             ref={graphDisplayRef}
+            graph={largeGraph}
             isGestureActive={webcamEnabled && activeHandCount > 0}
           />
           
@@ -1336,7 +1348,6 @@ const Results: React.FC = () => {
             </Box>
           )}
 
-           <GraphDisplay graph={largeGraph} />
         </Box>
 
       </Box>

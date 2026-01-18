@@ -21,12 +21,11 @@ export interface GraphDisplayRef {
 }
 
 interface GraphDisplayProps {
-    cursors?: GestureControlState['cursors'];
     isGestureActive?: boolean; // Pause animation when user is controlling with gestures
     graph?: CodebaseGraph | null; // Optional direct graph prop
 }
 
-const GraphDisplay = forwardRef<GraphDisplayRef, GraphDisplayProps>(({ cursors, isGestureActive = false, graph }, ref) => {
+const GraphDisplay = forwardRef<GraphDisplayRef, GraphDisplayProps>(({ isGestureActive = false, graph }, ref) => {
     const theme = useTheme();
     const reduxGraph = useSelector(selectGraph);
     const graphData = graph || reduxGraph; // Use prop if provided, otherwise use Redux
@@ -51,7 +50,7 @@ const GraphDisplay = forwardRef<GraphDisplayRef, GraphDisplayProps>(({ cursors, 
     });
 
     // Color palette for category mapping
-    const categoryColors = [
+    const categoryColors = useMemo(() => [
         '#FF6B6B', // Red
         '#4ECDC4', // Teal
         '#45B7D1', // Blue
@@ -70,10 +69,10 @@ const GraphDisplay = forwardRef<GraphDisplayRef, GraphDisplayProps>(({ cursors, 
         '#FFB74D', // Light Orange
         '#A5D6A7', // Light Mint
         '#F48FB1'  // Light Pink
-    ];
+    ], []);
 
-    const { nodes, edges } = useMemo(() => {
-        if (!graphData) return { nodes: [], edges: [] };
+    const { baseNodes, baseEdges } = useMemo(() => {
+        if (!graphData) return { baseNodes: [] as GraphNode[], baseEdges: [] as GraphEdge[] };
 
         // Calculate degrees (incoming + outgoing)
         const degrees = new Array(graphData.nodes.length).fill(0);
@@ -86,8 +85,7 @@ const GraphDisplay = forwardRef<GraphDisplayRef, GraphDisplayProps>(({ cursors, 
 
         const myNodes: GraphNode[] = graphData.nodes.map((node: any, index: number) => {
             const nodeId = index.toString();
-            const isActive = activeNodeIds.includes(nodeId);
-
+            
             const x = node.num_lines || 0;
             const y = degrees[index] || 0;
             
@@ -101,8 +99,7 @@ const GraphDisplay = forwardRef<GraphDisplayRef, GraphDisplayProps>(({ cursors, 
                 label: node.filepath,
                 fill: categoryColors[node.category % categoryColors.length] || '#CCCCCC',
                 data: node, // Storing code data for potential click interaction
-                size: size,
-                opacity: activeNodeIds.length === 0 || isActive ? 1 : 0.4
+                size: size
             };
         });
 
@@ -111,11 +108,27 @@ const GraphDisplay = forwardRef<GraphDisplayRef, GraphDisplayProps>(({ cursors, 
             source: edge[0].toString(),
             target: edge[1].toString(),
             size: edge[2] || 1, // Use weight for edge width (size)
-            opacity: activeNodeIds.length > 0 ? 0.1 : 0.5
+        }));
+
+        return { baseNodes: myNodes, baseEdges: myEdges };
+    }, [graphData, categoryColors]);
+
+    const { nodes, edges } = useMemo(() => {
+        const activeSet = new Set(activeNodeIds);
+        const hasActive = activeSet.size > 0;
+
+        const myNodes: GraphNode[] = baseNodes.map((node: any) => ({
+            ...node,
+            opacity: !hasActive || activeSet.has(node.id) ? 1 : 0.4
+        }));
+
+        const myEdges: GraphEdge[] = baseEdges.map((edge: any) => ({
+            ...edge,
+            opacity: hasActive ? 0.1 : 0.5
         }));
 
         return { nodes: myNodes, edges: myEdges };
-    }, [graphData, activeNodeIds]);
+    }, [baseNodes, baseEdges, activeNodeIds]);
 
     // Track frame count for debug logging
     const frameCountRef = useRef(0);
@@ -208,8 +221,8 @@ const GraphDisplay = forwardRef<GraphDisplayRef, GraphDisplayProps>(({ cursors, 
             // Helper to clean paths for comparison (remove 'root/' prefix, ignore leading slashes)
             const cleanPath = (p: string) => p.replace(/^root[\/\\]/, '').replace(/^[\\\/]+/, '').toLowerCase();
             
-            const targetIds = nodes
-                .filter(n => {
+            const targetIds = baseNodes
+                .filter((n: GraphNode) => {
                     // Direct ID match
                     if (nodeIdsOrFilepaths.includes(n.id)) return true;
                     // Label/Filepath match
@@ -223,7 +236,7 @@ const GraphDisplay = forwardRef<GraphDisplayRef, GraphDisplayProps>(({ cursors, 
                     }
                     return false;
                 })
-                .map(n => n.id);
+                .map((n: GraphNode) => n.id);
                 
             if (targetIds.length > 0) {
                 console.log(`[GraphDisplay] Focusing on nodes: ${targetIds.join(', ')}`);
@@ -238,7 +251,7 @@ const GraphDisplay = forwardRef<GraphDisplayRef, GraphDisplayProps>(({ cursors, 
             // Empty input = clear selection
             setActiveNodeIds([]);
         }
-    }, [nodes]);
+    }, [baseNodes]);
 
     // Handle clicking empty space to reset
     const handleCanvasClick = useCallback(() => {
@@ -248,12 +261,12 @@ const GraphDisplay = forwardRef<GraphDisplayRef, GraphDisplayProps>(({ cursors, 
     
     // Select node via ref
     const selectNode = useCallback((filepath: string) => {
-        const node = nodes.find(n => n.label === filepath);
+        const node = baseNodes.find((n: GraphNode) => n.label === filepath);
         if (node) {
             setSelectedNodeData(node.data);
             setIsModalOpen(true);
         }
-    }, [nodes]);
+    }, [baseNodes]);
 
     // Expose methods to parent
     useImperativeHandle(ref, () => ({
