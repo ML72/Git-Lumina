@@ -503,9 +503,9 @@ const Webcam: React.FC<WebcamProps> = ({
                 
                 hands.setOptions({
                     maxNumHands: 2,
-                    modelComplexity: 0, // Reduced from 1 to 0 for better performance
-                    minDetectionConfidence: 0.4, // Lowered for better tracking during fast movement
-                    minTrackingConfidence: 0.3  // Lowered to maintain tracking during quick movements
+                    modelComplexity: 0, // Lite model for best performance
+                    minDetectionConfidence: 0.4, // Balance between detection and false positives
+                    minTrackingConfidence: 0.05   // Lower to maintain tracking during movement
                 });
                 
                 hands.onResults(onHandResults);
@@ -524,10 +524,11 @@ const Webcam: React.FC<WebcamProps> = ({
                 });
                 
                 pose.setOptions({
-                    modelComplexity: 0, // Reduced from 1 to 0 for better performance
+                    modelComplexity: 0, // Lite model
                     smoothLandmarks: true,
-                    minDetectionConfidence: 0.6,
-                    minTrackingConfidence: 0.5
+                    enableSegmentation: false, // Disable segmentation for performance
+                    minDetectionConfidence: 0.5,
+                    minTrackingConfidence: 0.4
                 });
                 
                 pose.onResults(onPoseResults);
@@ -538,12 +539,17 @@ const Webcam: React.FC<WebcamProps> = ({
                 
                 // Frame skip counter for performance optimization
                 let processFrameCount = 0;
-                const POSE_FRAME_SKIP = 15; // Process pose every 15th frame (wingspan changes slowly)
+                const POSE_FRAME_SKIP = 20; // Process pose every 20th frame (wingspan changes slowly)
+                let isProcessing = false; // Prevent frame overlap
                 
-                // Set up camera with reduced resolution for better performance
+                // Set up camera with higher resolution for better palm detection
                 const camera = new Camera(videoRef.current, {
                     onFrame: async () => {
+                        // Skip if still processing previous frame to prevent backlog
+                        if (isProcessing) return;
+                        
                         if (videoRef.current && handsRef.current && poseRef.current) {
+                            isProcessing = true;
                             processFrameCount++;
                             
                             try {
@@ -556,11 +562,13 @@ const Webcam: React.FC<WebcamProps> = ({
                                 await handsRef.current.send({ image: videoRef.current });
                             } catch (err) {
                                 // Silently ignore frame processing errors
+                            } finally {
+                                isProcessing = false;
                             }
                         }
                     },
-                    width: 480,  // Reduced from 640 for better performance
-                    height: 360  // Reduced from 480 for better performance
+                    width: 1280,  // Higher resolution for better palm detection
+                    height: 720
                 });
                 
                 cameraRef.current = camera;
