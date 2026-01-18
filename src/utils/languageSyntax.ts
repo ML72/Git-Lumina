@@ -8,7 +8,7 @@ export interface FileAnalysis {
     imports: string[];
 }
 
-type Language = 'javascript' | 'typescript' | 'python' | 'java' | 'c' | 'cpp' | 'unknown';
+type Language = 'javascript' | 'typescript' | 'python' | 'java' | 'c' | 'cpp' | 'json' | 'markdown' | 'css' | 'html' | 'yaml' | 'text' | 'go' | 'rust' | 'php' | 'ruby' | 'Other';
 
 export const getLanguageFromExtension = (filename: string): Language => {
     const ext = filename.split('.').pop()?.toLowerCase();
@@ -30,8 +30,29 @@ export const getLanguageFromExtension = (filename: string): Language => {
         case 'hpp':
         case 'cc':
             return 'cpp';
+        case 'json':
+            return 'json';
+        case 'md':
+            return 'markdown';
+        case 'css':
+            return 'css';
+        case 'html':
+            return 'html';
+        case 'yaml':
+        case 'yml':
+            return 'yaml';
+        case 'txt':
+            return 'text';
+        case 'go':
+            return 'go';
+        case 'rs':
+            return 'rust';
+        case 'php':
+            return 'php';
+        case 'rb':
+            return 'ruby';
         default:
-            return 'unknown';
+            return 'Other';
     }
 };
 

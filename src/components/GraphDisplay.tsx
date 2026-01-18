@@ -15,6 +15,7 @@ import { CodebaseGraph } from '../types/CodebaseGraph';
 export interface GraphDisplayRef {
     applyGestureControl: (control: GestureControlState) => void;
     resetView: () => void;
+    selectNode: (filepath: string) => void;
 }
 
 interface GraphDisplayProps {
@@ -66,13 +67,32 @@ const GraphDisplay = forwardRef<GraphDisplayRef, GraphDisplayProps>(({ cursors, 
     const { nodes, edges } = useMemo(() => {
         if (!graphData) return { nodes: [], edges: [] };
 
-        const myNodes: GraphNode[] = graphData.nodes.map((node: any, index: number) => ({
-            id: index.toString(), // Using index as ID to match edge source/target
-            label: node.filepath,
-            fill: categoryColors[node.category % categoryColors.length] || '#CCCCCC',
-            data: node, // Storing code data for potential click interaction
-            size: 7 // Default size
-        }));
+        // Calculate degrees (incoming + outgoing)
+        const degrees = new Array(graphData.nodes.length).fill(0);
+        graphData.edges.forEach((edge: any) => {
+            const source = edge[0];
+            const target = edge[1];
+            if (degrees[source] !== undefined) degrees[source]++;
+            if (degrees[target] !== undefined) degrees[target]++;
+        });
+
+        const myNodes: GraphNode[] = graphData.nodes.map((node: any, index: number) => {
+            const x = node.num_lines || 0;
+            const y = degrees[index] || 0;
+            
+            // Formula: Size proportional to 1 + ln(x+1) + ln(y+1)
+            // Using a multiplier to scale it to appropriate pixel size
+            const rawSize = 1 + Math.log(x + 1) + Math.log(y + 1);
+            const size = rawSize * 3; 
+
+            return {
+                id: index.toString(), // Using index as ID to match edge source/target
+                label: node.filepath,
+                fill: categoryColors[node.category % categoryColors.length] || '#CCCCCC',
+                data: node, // Storing code data for potential click interaction
+                size: size
+            };
+        });
 
         const myEdges: GraphEdge[] = graphData.edges.map((edge: any, index: number) => ({
             id: `edge-${index}`,
@@ -165,11 +185,21 @@ const GraphDisplay = forwardRef<GraphDisplayRef, GraphDisplayProps>(({ cursors, 
         };
     }, []);
     
+    // Select node via ref
+    const selectNode = useCallback((filepath: string) => {
+        const node = nodes.find(n => n.label === filepath);
+        if (node) {
+            setSelectedNodeData(node.data);
+            setIsModalOpen(true);
+        }
+    }, [nodes]);
+
     // Expose methods to parent
     useImperativeHandle(ref, () => ({
         applyGestureControl,
-        resetView
-    }), [applyGestureControl, resetView]);
+        resetView,
+        selectNode
+    }), [applyGestureControl, resetView, selectNode]);
 
     useEffect(() => {
         if (graphRef.current && nodes.length > 0) {
