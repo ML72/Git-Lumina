@@ -95,19 +95,22 @@ const Results: React.FC = () => {
   const apiKey = useSelector(selectOpenAiKey);
   const [query, setQuery] = useState('');
   const [webcamEnabled, setWebcamEnabled] = useState(true);
-  const [webcamVisible, setWebcamVisible] = useState(true);
-  const [cursors, setCursors] = useState<GestureControlState['cursors']>({
-    left: null,
-    right: null
-  });
-  const [gestureMode, setGestureMode] = useState<'idle' | 'left-hand-rotate' | 'right-hand-pan' | 'two-hand-zoom'>('idle');
+  const [autoRotateEnabled, setAutoRotateEnabled] = useState(true);
   const [activeHandCount, setActiveHandCount] = useState(0);
+  const [gestureMode, setGestureMode] = useState<'idle' | 'left-hand-rotate' | 'right-hand-pan' | 'two-hand-zoom'>('idle');
   
   // Track pinch states for click/escape handling
   const [leftPinching, setLeftPinching] = useState(false);
   const [rightPinching, setRightPinching] = useState(false);
   const prevLeftPinchRef = useRef(false);
   const prevRightPinchRef = useRef(false);
+  
+  // Pinch delay timers - click only triggers after 0.5s of continuous pinching
+  const PINCH_DELAY_MS = 250;
+  const leftPinchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const rightPinchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const leftPinchTriggeredRef = useRef(false);
+  const rightPinchTriggeredRef = useRef(false);
   
   // Track hand positions for cursor display (scaled by wingspan)
   const [handPositions, setHandPositions] = useState<{
@@ -118,8 +121,6 @@ const Results: React.FC = () => {
   // Track sensitivity scale for cursor positioning
   const [sensitivityScale, setSensitivityScale] = useState(1);
   
-  // Debug: track click positions to visualize
-  const [clickIndicator, setClickIndicator] = useState<{ x: number; y: number } | null>(null);
   
   const graphDisplayRef = useRef<GraphDisplayRef>(null);
   const graphContainerRef = useRef<HTMLDivElement>(null);
@@ -151,6 +152,8 @@ const Results: React.FC = () => {
   // Timer ref for auto-reset when no hands detected
   const noHandsTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const hadHandsRef = useRef(false);
+  const webcamEnabledRef = useRef(webcamEnabled);
+  const autoRotateEnabledRef = useRef(autoRotateEnabled);
   const [expandedCategories, setExpandedCategories] = useState<Record<number, boolean>>({});
 
   const toggleCategory = (idx: number) => {
@@ -301,16 +304,27 @@ const Results: React.FC = () => {
     'What are the main components?'
   ];
   
+  // Keep refs in sync with state
+  useEffect(() => {
+    webcamEnabledRef.current = webcamEnabled;
+  }, [webcamEnabled]);
+  
+  useEffect(() => {
+    autoRotateEnabledRef.current = autoRotateEnabled;
+  }, [autoRotateEnabled]);
+  
   // Handle gesture updates from webcam
   const handleGestureUpdate = useCallback((gestureState: GestureState) => {
+    // Skip processing if motion control is disabled
+    if (!webcamEnabledRef.current) {
+      return;
+    }
+    
     const controlState = processGesture(gestureState);
     
-    // Update cursors for visualization
-    setCursors(controlState.cursors);
-    
-    // Update mode for display
-    setGestureMode(controlState.mode);
+    // Update active hand count and mode for gesture detection
     setActiveHandCount(controlState.activeHandCount);
+    setGestureMode(controlState.mode);
     
     // Update sensitivity scale for cursor positioning
     setSensitivityScale(gestureState.sensitivityScale);
@@ -340,54 +354,45 @@ const Results: React.FC = () => {
     const currentLeftPinch = gestureState.leftHand?.isPinching ?? false;
     const currentRightPinch = gestureState.rightHand?.isPinching ?? false;
     
-    // Helper to get screen coordinates for click events (relative to graph container)
-    const getScreenCoords = (rawPos: { x: number; y: number }) => {
-      const scaled = scalePosition(rawPos);
-      // Get the graph container's bounding rect
-      const containerRect = graphContainerRef.current?.getBoundingClientRect();
-      if (containerRect) {
-        // Mirror X axis and convert to screen pixels relative to container
-        return {
-          x: containerRect.left + (1 - scaled.x) * containerRect.width,
-          y: containerRect.top + scaled.y * containerRect.height
-        };
-      }
-      // Fallback to window coordinates
-      return {
-        x: (1 - scaled.x) * window.innerWidth,
-        y: scaled.y * window.innerHeight
-      };
-    };
-    
     // Left hand pinch state change
     if (currentLeftPinch !== prevLeftPinchRef.current) {
       if (currentLeftPinch) {
-        // Pinch started - select node at cursor position
+        // Pinch started - start delay timer
+        leftPinchTriggeredRef.current = false;
+        
+        // Clear any existing timer
+        if (leftPinchTimerRef.current) {
+          clearTimeout(leftPinchTimerRef.current);
+        }
+        
+        // Capture current position for the delayed click
         const scaled = scalePosition(gestureState.leftHand!.position);
-        // The cursor display uses (1 - scaled.x) for mirroring, so we pass that
         const normX = 1 - scaled.x;
         const normY = scaled.y;
         
-        // Show click indicator at screen position
-        const coords = getScreenCoords(gestureState.leftHand!.position);
-        console.log(`[Results] Left hand pinch - normalized (${normX.toFixed(3)}, ${normY.toFixed(3)})`);
-        setClickIndicator({ x: coords.x, y: coords.y });
-        setTimeout(() => setClickIndicator(null), 500);
-        
-        // Directly select node at position
-        if (graphDisplayRef.current) {
-          console.log('[Results] Calling selectNodeAtPosition on graphDisplayRef');
-          const result = graphDisplayRef.current.selectNodeAtPosition(normX, normY);
-          console.log('[Results] selectNodeAtPosition result:', result);
-        } else {
-          console.log('[Results] ERROR: graphDisplayRef.current is null!');
-        }
+        // Start delay timer - click will trigger after 0.5s of continuous pinching
+        leftPinchTimerRef.current = setTimeout(() => {
+          leftPinchTriggeredRef.current = true;
+          
+          // Select node at position
+          if (graphDisplayRef.current) {
+            graphDisplayRef.current.selectNodeAtPosition(normX, normY);
+          }
+        }, PINCH_DELAY_MS);
       } else {
-        // Pinch ended - close modal if open
-        console.log('[Results] Left hand pinch ended - closing modal');
-        if (graphDisplayRef.current) {
-          graphDisplayRef.current.closeModal();
+        // Pinch ended - cancel timer if not yet triggered, or close modal if triggered
+        if (leftPinchTimerRef.current) {
+          clearTimeout(leftPinchTimerRef.current);
+          leftPinchTimerRef.current = null;
         }
+        
+        if (leftPinchTriggeredRef.current) {
+          // Click was triggered, now close modal
+          if (graphDisplayRef.current) {
+            graphDisplayRef.current.closeModal();
+          }
+        }
+        leftPinchTriggeredRef.current = false;
       }
       prevLeftPinchRef.current = currentLeftPinch;
       setLeftPinching(currentLeftPinch);
@@ -396,32 +401,42 @@ const Results: React.FC = () => {
     // Right hand pinch state change
     if (currentRightPinch !== prevRightPinchRef.current) {
       if (currentRightPinch) {
-        // Pinch started - select node at cursor position
+        // Pinch started - start delay timer
+        rightPinchTriggeredRef.current = false;
+        
+        // Clear any existing timer
+        if (rightPinchTimerRef.current) {
+          clearTimeout(rightPinchTimerRef.current);
+        }
+        
+        // Capture current position for the delayed click
         const scaled = scalePosition(gestureState.rightHand!.position);
-        // The cursor display uses (1 - scaled.x) for mirroring, so we pass that
         const normX = 1 - scaled.x;
         const normY = scaled.y;
         
-        // Show click indicator at screen position
-        const coords = getScreenCoords(gestureState.rightHand!.position);
-        console.log(`[Results] Right hand pinch - normalized (${normX.toFixed(3)}, ${normY.toFixed(3)})`);
-        setClickIndicator({ x: coords.x, y: coords.y });
-        setTimeout(() => setClickIndicator(null), 500);
-        
-        // Directly select node at position
-        if (graphDisplayRef.current) {
-          console.log('[Results] Calling selectNodeAtPosition on graphDisplayRef (right)');
-          const result = graphDisplayRef.current.selectNodeAtPosition(normX, normY);
-          console.log('[Results] selectNodeAtPosition result (right):', result);
-        } else {
-          console.log('[Results] ERROR: graphDisplayRef.current is null! (right)');
-        }
+        // Start delay timer - click will trigger after 0.5s of continuous pinching
+        rightPinchTimerRef.current = setTimeout(() => {
+          rightPinchTriggeredRef.current = true;
+          
+          // Select node at position
+          if (graphDisplayRef.current) {
+            graphDisplayRef.current.selectNodeAtPosition(normX, normY);
+          }
+        }, PINCH_DELAY_MS);
       } else {
-        // Pinch ended - close modal if open
-        console.log('[Results] Right hand pinch ended - closing modal');
-        if (graphDisplayRef.current) {
-          graphDisplayRef.current.closeModal();
+        // Pinch ended - cancel timer if not yet triggered, or close modal if triggered
+        if (rightPinchTimerRef.current) {
+          clearTimeout(rightPinchTimerRef.current);
+          rightPinchTimerRef.current = null;
         }
+        
+        if (rightPinchTriggeredRef.current) {
+          // Click was triggered, now close modal
+          if (graphDisplayRef.current) {
+            graphDisplayRef.current.closeModal();
+          }
+        }
+        rightPinchTriggeredRef.current = false;
       }
       prevRightPinchRef.current = currentRightPinch;
       setRightPinching(currentRightPinch);
@@ -443,13 +458,11 @@ const Results: React.FC = () => {
       }
     } else if (hadHandsRef.current && !noHandsTimerRef.current) {
       // No hands detected and we previously had hands - start reset timer
-      console.log('[Results] No hands detected - starting 2 second reset timer');
       noHandsTimerRef.current = setTimeout(() => {
-        console.log('[Results] 2 seconds without hands - resetting view');
         if (graphDisplayRef.current) {
           graphDisplayRef.current.resetView();
-          // Set camera mode to orbit when returning to standard view
-          graphDisplayRef.current.setCameraMode('orbit');
+          // Set camera mode based on auto-rotate setting (use ref for latest value)
+          graphDisplayRef.current.setCameraMode(autoRotateEnabledRef.current ? 'orbit' : 'rotate');
         }
         setActiveHint(null);
         noHandsTimerRef.current = null;
@@ -1094,35 +1107,6 @@ const Results: React.FC = () => {
              </Paper>
           )}
 
-          {/* Debug Click Indicator */}
-          {clickIndicator && (
-            <Box
-              sx={{
-                position: 'fixed',
-                left: clickIndicator.x,
-                top: clickIndicator.y,
-                transform: 'translate(-50%, -50%)',
-                pointerEvents: 'none',
-                zIndex: 2000,
-              }}
-            >
-              <Box
-                sx={{
-                  width: 30,
-                  height: 30,
-                  borderRadius: '50%',
-                  border: '3px solid #00FF00',
-                  bgcolor: 'rgba(0, 255, 0, 0.3)',
-                  animation: 'clickPulse 0.5s ease-out',
-                  '@keyframes clickPulse': {
-                    '0%': { transform: 'scale(1)', opacity: 1 },
-                    '100%': { transform: 'scale(2)', opacity: 0 },
-                  },
-                }}
-              />
-            </Box>
-          )}
-
           {/* Hand Cursor Overlays */}
           {webcamEnabled && handPositions.left && (
             <Box
@@ -1244,102 +1228,104 @@ const Results: React.FC = () => {
             </Box>
           )}
           
-          {/* Webcam Preview (Picture-in-Picture style) - Always visible in bottom right */}
-          <Collapse in={webcamVisible}>
-            <Box 
-              sx={{ 
-                position: 'absolute', 
-                bottom: 20, 
-                right: 20,
+          {/* Hidden Webcam for gesture processing */}
+          <Box sx={{ position: 'absolute', width: 1, height: 1, overflow: 'hidden', opacity: 0, pointerEvents: 'none' }}>
+            <Webcam 
+              onGestureUpdate={handleGestureUpdate}
+              showVideo={false}
+              showOverlay={false}
+              enabled={true}
+              onError={handleWebcamError}
+            />
+          </Box>
+          
+          {/* Control Toggles */}
+          <Box
+            sx={{
+              position: 'absolute',
+              bottom: 20,
+              right: 20,
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 1,
+              zIndex: 100,
+            }}
+          >
+            {/* Motion Control Toggle */}
+            <Box
+              sx={{
                 display: 'flex',
-                flexDirection: 'column',
-                alignItems: 'flex-end',
+                alignItems: 'center',
                 gap: 1,
-                zIndex: 100,
+                bgcolor: 'rgba(22, 27, 34, 0.9)',
+                backdropFilter: 'blur(4px)',
+                px: 1.5,
+                py: 0.75,
+                borderRadius: 2,
+                border: `1px solid ${webcamEnabled ? 'rgba(163, 113, 247, 0.5)' : 'rgba(255,255,255,0.1)'}`,
+                boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
               }}
             >
-              {/* Controls and status indicator - Moved above camera */}
-              <Box
+              <Typography variant="caption" sx={{ fontWeight: 600, color: '#d0d7de', minWidth: 100 }}>
+                Motion Control
+              </Typography>
+              <Switch
+                checked={webcamEnabled}
+                onChange={(e) => setWebcamEnabled(e.target.checked)}
+                size="small"
                 sx={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 1,
-                  bgcolor: 'rgba(22, 27, 34, 0.8)',
-                  backdropFilter: 'blur(4px)',
-                  px: 1.5,
-                  py: 0.5,
-                  borderRadius: 2,
-                  border: '1px solid rgba(255,255,255,0.1)',
-                  boxShadow: '0 4px 12px rgba(0,0,0,0.2)',
+                  '& .MuiSwitch-switchBase.Mui-checked': {
+                    color: '#a371f7',
+                  },
+                  '& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track': {
+                    backgroundColor: 'rgba(163, 113, 247, 0.5)',
+                  }
                 }}
-              >
-                  <Typography variant="caption" sx={{ fontWeight: 600, color: '#d0d7de' }}>
-                    Motion Controls
-                  </Typography>
-                  <Switch
-                    checked={webcamEnabled}
-                    onChange={(e) => setWebcamEnabled(e.target.checked)}
-                    size="small"
-                    sx={{
-                       '& .MuiSwitch-switchBase': {
-                           color: '#fff',
-                       },
-                       '& .MuiSwitch-switchBase.Mui-checked': {
-                           color: '#a371f7', // Purple
-                       },
-                       '& .MuiSwitch-track': {
-                           backgroundColor: '#666',
-                       },
-                       '& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track': {
-                            backgroundColor: 'rgba(163, 113, 247, 0.5)', // Purple/translucent
-                       }
-                    }}
-                  />
-                  
-                  <Box
-                    sx={{
-                      bgcolor: webcamEnabled ? 'rgba(78, 205, 196, 0.9)' : 'rgba(100, 100, 100, 0.9)',
-                      color: '#fff',
-                      px: 1,
-                      py: 0.5,
-                      borderRadius: 1,
-                      fontSize: '10px',
-                      fontWeight: 'bold',
-                      textTransform: 'uppercase',
-                      minWidth: 35,
-                      textAlign: 'center'
-                    }}
-                  >
-                    {webcamEnabled ? 'ON' : 'OFF'}
-                  </Box>
-              </Box>
-
-              <Box 
-                sx={{ 
-                  width: 320,
-                  height: 240,
-                  borderRadius: 2,
-                  overflow: 'hidden',
-                  boxShadow: '0 8px 32px rgba(0,0,0,0.4)',
-                  border: `2px solid ${webcamEnabled ? 'rgba(78, 205, 196, 0.5)' : 'rgba(255,255,255,0.1)'}`,
-                  transition: 'border-color 0.3s ease',
-                  bgcolor: '#000'
-                }}
-              >
-                <Webcam 
-                  onGestureUpdate={webcamEnabled ? handleGestureUpdate : () => {}}
-                  showVideo={true}
-                  showOverlay={true}
-                  enabled={webcamEnabled}
-                  onError={handleWebcamError}
-                />
-              </Box>
+              />
             </Box>
-          </Collapse>
+            
+            {/* Auto-Rotate Toggle */}
+            <Box
+              sx={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 1,
+                bgcolor: 'rgba(22, 27, 34, 0.9)',
+                backdropFilter: 'blur(4px)',
+                px: 1.5,
+                py: 0.75,
+                borderRadius: 2,
+                border: `1px solid ${autoRotateEnabled ? 'rgba(78, 205, 196, 0.5)' : 'rgba(255,255,255,0.1)'}`,
+                boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
+              }}
+            >
+              <Typography variant="caption" sx={{ fontWeight: 600, color: '#d0d7de', minWidth: 100 }}>
+                Auto-Rotate
+              </Typography>
+              <Switch
+                checked={autoRotateEnabled}
+                onChange={(e) => {
+                  setAutoRotateEnabled(e.target.checked);
+                  // Immediately update camera mode if no hands detected
+                  if (graphDisplayRef.current && !hadHandsRef.current) {
+                    graphDisplayRef.current.setCameraMode(e.target.checked ? 'orbit' : 'rotate');
+                  }
+                }}
+                size="small"
+                sx={{
+                  '& .MuiSwitch-switchBase.Mui-checked': {
+                    color: '#4ECDC4',
+                  },
+                  '& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track': {
+                    backgroundColor: 'rgba(78, 205, 196, 0.5)',
+                  }
+                }}
+              />
+            </Box>
+          </Box>
           
-          
-          {/* Active Mode Indicator - Large visual feedback */}
-          {webcamEnabled && (
+          {/* Hand Detection Indicator */}
+          {webcamEnabled && activeHandCount > 0 && (
             <Box
               sx={{
                 position: 'absolute',
@@ -1347,13 +1333,8 @@ const Results: React.FC = () => {
                 left: '50%',
                 transform: 'translateX(-50%)',
                 zIndex: 100,
-                display: 'flex',
-                flexDirection: 'column',
-                alignItems: 'center',
-                gap: 1
               }}
             >
-              {/* Mode Badge */}
               <Typography
                 component="div"
                 sx={{
@@ -1363,10 +1344,10 @@ const Results: React.FC = () => {
                   bgcolor: gestureMode === 'idle' 
                     ? 'rgba(100, 100, 100, 0.9)' 
                     : gestureMode === 'left-hand-rotate' 
-                      ? 'rgba(255, 193, 7, 0.9)'  // Yellow for rotate
+                      ? 'rgba(255, 193, 7, 0.9)'
                       : gestureMode === 'right-hand-pan'
-                        ? 'rgba(255, 107, 107, 0.9)'  // Red for pan
-                        : 'rgba(78, 205, 196, 0.9)',  // Teal for zoom
+                        ? 'rgba(255, 107, 107, 0.9)'
+                        : 'rgba(78, 205, 196, 0.9)',
                   color: '#fff',
                   fontWeight: 'bold',
                   fontSize: '1.1rem',
@@ -1381,22 +1362,6 @@ const Results: React.FC = () => {
                 {gestureMode === 'left-hand-rotate' && '🔄 ROTATE MODE'}
                 {gestureMode === 'right-hand-pan' && '✊ PAN MODE'}
                 {gestureMode === 'two-hand-zoom' && '🤏 ZOOM MODE'}
-              </Typography>
-              
-              {/* Hand count indicator */}
-              <Typography 
-                variant="caption" 
-                sx={{ 
-                  color: '#fff', 
-                  bgcolor: 'rgba(0,0,0,0.6)', 
-                  px: 2, 
-                  py: 0.5, 
-                  borderRadius: 1 
-                }}
-              >
-                Active hands: {activeHandCount} | 
-                L: {cursors.left ? (cursors.left.isActive ? '✊ CLOSED' : '✋ OPEN') : '❌'} | 
-                R: {cursors.right ? (cursors.right.isActive ? '✊ CLOSED' : '✋ OPEN') : '❌'}
               </Typography>
             </Box>
           )}

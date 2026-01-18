@@ -104,7 +104,9 @@ const isHandOpen = (landmarks: NormalizedLandmarkList): boolean => {
 };
 
 // Check if hand is making a pinch gesture (thumb + index + middle pinched, pinky extended)
-const isHandPinching = (landmarks: NormalizedLandmarkList): boolean => {
+// sensitivityScale is used to compensate for user distance - when far away (high scale), 
+// fingers appear closer in normalized space, so we need stricter thresholds
+const isHandPinching = (landmarks: NormalizedLandmarkList, sensitivityScale: number = 1): boolean => {
     const wrist = landmarks[WRIST];
     const thumbTip = landmarks[THUMB_TIP];
     const indexTip = landmarks[INDEX_TIP];
@@ -118,8 +120,10 @@ const isHandPinching = (landmarks: NormalizedLandmarkList): boolean => {
     const thumbToMiddle = Math.hypot(thumbTip.x - middleTip.x, thumbTip.y - middleTip.y);
     const indexToMiddle = Math.hypot(indexTip.x - middleTip.x, indexTip.y - middleTip.y);
     
-    // Threshold for "pinched together" - fingers should be very close
-    const pinchThreshold = 0.08; // Normalized distance threshold
+    // Base threshold for "pinched together" - fingers should be very close
+    // Scale by inverse of sensitivityScale: when user is far (high scale), use smaller threshold
+    const basePinchThreshold = 0.08;
+    const pinchThreshold = basePinchThreshold / Math.max(sensitivityScale, 0.5);
     
     // Check if thumb, index, and middle are pinched together
     const fingersPinched = thumbToIndex < pinchThreshold && 
@@ -280,12 +284,10 @@ const Webcam: React.FC<WebcamProps> = ({
                 const handData: HandData = {
                     position: getHandCenter(landmarks),
                     isOpen: isHandOpen(landmarks),
-                    isPinching: isHandPinching(landmarks),
+                    isPinching: isHandPinching(landmarks, gestureStateRef.current.sensitivityScale),
                     handedness: actualHandedness as 'Left' | 'Right',
                     landmarks: landmarks
                 };
-                
-                console.log(`[Webcam] Hand ${i}: ${actualHandedness}, Open: ${handData.isOpen}, Pinching: ${handData.isPinching}, Pos: (${handData.position.x.toFixed(2)}, ${handData.position.y.toFixed(2)})`);
                 
                 if (actualHandedness === 'Left') {
                     leftHand = handData;
