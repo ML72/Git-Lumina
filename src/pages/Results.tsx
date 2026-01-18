@@ -20,7 +20,8 @@ import {
   Tooltip,
   Collapse,
   ListItemIcon,
-  ListItemButton
+  ListItemButton,
+  Switch
 } from '@mui/material';
 import { 
   Send as SendIcon, 
@@ -188,7 +189,10 @@ const Results: React.FC = () => {
     }
   }, [processGesture]);
   
-  // Cleanup timer on unmount
+  // Handle webcam error
+  const handleWebcamError = useCallback(() => {
+    setWebcamEnabled(false);
+  }, []);
 
   const handleSuggestedQuestion = (text: string) => {
       setChat(prev => [...prev, { id: Date.now(), sender: 'user', text }]);
@@ -738,40 +742,90 @@ const Results: React.FC = () => {
             <Box 
               sx={{ 
                 position: 'absolute', 
-                bottom: 100, 
-                right: 20, 
-                width: 320,
-                height: 240,
-                borderRadius: 2,
-                overflow: 'hidden',
-                boxShadow: '0 8px 32px rgba(0,0,0,0.4)',
-                border: `2px solid ${webcamEnabled ? 'rgba(78, 205, 196, 0.5)' : 'rgba(255,255,255,0.1)'}`,
+                bottom: 20, 
+                right: 20,
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'flex-end',
+                gap: 1,
                 zIndex: 100,
-                transition: 'border-color 0.3s ease'
               }}
             >
-              <Webcam 
-                onGestureUpdate={webcamEnabled ? handleGestureUpdate : () => {}}
-                showVideo={true}
-                showOverlay={true}
-              />
-              {/* Gesture control status indicator */}
+              {/* Controls and status indicator - Moved above camera */}
               <Box
                 sx={{
-                  position: 'absolute',
-                  top: 8,
-                  right: 8,
-                  bgcolor: webcamEnabled ? 'rgba(78, 205, 196, 0.9)' : 'rgba(100, 100, 100, 0.9)',
-                  color: '#fff',
-                  px: 1,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 1,
+                  bgcolor: 'rgba(22, 27, 34, 0.8)',
+                  backdropFilter: 'blur(4px)',
+                  px: 1.5,
                   py: 0.5,
-                  borderRadius: 1,
-                  fontSize: '10px',
-                  fontWeight: 'bold',
-                  textTransform: 'uppercase'
+                  borderRadius: 2,
+                  border: '1px solid rgba(255,255,255,0.1)',
+                  boxShadow: '0 4px 12px rgba(0,0,0,0.2)',
                 }}
               >
-                {webcamEnabled ? '● Controls Active' : '○ Controls Off'}
+                  <Typography variant="caption" sx={{ fontWeight: 600, color: '#d0d7de' }}>
+                    Motion Controls
+                  </Typography>
+                  <Switch
+                    checked={webcamEnabled}
+                    onChange={(e) => setWebcamEnabled(e.target.checked)}
+                    size="small"
+                    sx={{
+                       '& .MuiSwitch-switchBase': {
+                           color: '#fff',
+                       },
+                       '& .MuiSwitch-switchBase.Mui-checked': {
+                           color: '#a371f7', // Purple
+                       },
+                       '& .MuiSwitch-track': {
+                           backgroundColor: '#666',
+                       },
+                       '& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track': {
+                            backgroundColor: 'rgba(163, 113, 247, 0.5)', // Purple/translucent
+                       }
+                    }}
+                  />
+                  
+                  <Box
+                    sx={{
+                      bgcolor: webcamEnabled ? 'rgba(78, 205, 196, 0.9)' : 'rgba(100, 100, 100, 0.9)',
+                      color: '#fff',
+                      px: 1,
+                      py: 0.5,
+                      borderRadius: 1,
+                      fontSize: '10px',
+                      fontWeight: 'bold',
+                      textTransform: 'uppercase',
+                      minWidth: 35,
+                      textAlign: 'center'
+                    }}
+                  >
+                    {webcamEnabled ? 'ON' : 'OFF'}
+                  </Box>
+              </Box>
+
+              <Box 
+                sx={{ 
+                  width: 320,
+                  height: 240,
+                  borderRadius: 2,
+                  overflow: 'hidden',
+                  boxShadow: '0 8px 32px rgba(0,0,0,0.4)',
+                  border: `2px solid ${webcamEnabled ? 'rgba(78, 205, 196, 0.5)' : 'rgba(255,255,255,0.1)'}`,
+                  transition: 'border-color 0.3s ease',
+                  bgcolor: '#000'
+                }}
+              >
+                <Webcam 
+                  onGestureUpdate={webcamEnabled ? handleGestureUpdate : () => {}}
+                  showVideo={true}
+                  showOverlay={true}
+                  enabled={webcamEnabled}
+                  onError={handleWebcamError}
+                />
               </Box>
             </Box>
           </Collapse>
@@ -793,7 +847,8 @@ const Results: React.FC = () => {
               }}
             >
               {/* Mode Badge */}
-              <Box
+              <Typography
+                component="div"
                 sx={{
                   px: 3,
                   py: 1.5,
@@ -808,6 +863,7 @@ const Results: React.FC = () => {
                   color: '#fff',
                   fontWeight: 'bold',
                   fontSize: '1.1rem',
+                  fontFamily: theme.typography.fontFamily,
                   boxShadow: gestureMode !== 'idle' ? '0 0 20px rgba(255,255,255,0.3)' : 'none',
                   transition: 'all 0.2s ease',
                   textTransform: 'uppercase',
@@ -818,7 +874,7 @@ const Results: React.FC = () => {
                 {gestureMode === 'left-hand-rotate' && '🔄 ROTATE MODE'}
                 {gestureMode === 'right-hand-pan' && '✊ PAN MODE'}
                 {gestureMode === 'two-hand-zoom' && '🤏 ZOOM MODE'}
-              </Box>
+              </Typography>
               
               {/* Hand count indicator */}
               <Typography 

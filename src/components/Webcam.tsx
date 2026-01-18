@@ -1,9 +1,11 @@
 import React, { useRef, useEffect, useState, useCallback } from 'react';
 import { Box, Typography } from '@mui/material';
+import { useDispatch } from 'react-redux';
 import { Hands, Results as HandResults, NormalizedLandmarkList, HAND_CONNECTIONS } from '@mediapipe/hands';
 import { Pose, Results as PoseResults } from '@mediapipe/pose';
 import { Camera } from '@mediapipe/camera_utils';
 import { drawConnectors, drawLandmarks } from '@mediapipe/drawing_utils';
+import { setNewAlert } from '../service/alert';
 
 // Hand landmark indices
 const WRIST = 0;
@@ -43,6 +45,8 @@ interface WebcamProps {
     onGestureUpdate: (state: GestureState) => void;
     showVideo?: boolean;
     showOverlay?: boolean;
+    enabled?: boolean;
+    onError?: () => void;
 }
 
 // Calculate if hand is open or closed based on finger positions
@@ -179,8 +183,11 @@ interface DebugState {
 const Webcam: React.FC<WebcamProps> = ({
     onGestureUpdate,
     showVideo = true,
-    showOverlay = true
+    showOverlay = true,
+    enabled = true,
+    onError
 }) => {
+    const dispatch = useDispatch();
     const videoRef = useRef<HTMLVideoElement>(null);
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const handsRef = useRef<Hands | null>(null);
@@ -420,6 +427,12 @@ const Webcam: React.FC<WebcamProps> = ({
 
     // Initialize MediaPipe
     useEffect(() => {
+        if (!enabled) {
+            setDebugState(prev => ({ ...prev, status: 'Camera disabled', cameraStarted: false }));
+            setIsInitialized(false);
+            return;
+        }
+
         const initMediaPipe = async () => {
             console.log('[Webcam] Starting MediaPipe initialization...');
             
@@ -508,9 +521,25 @@ const Webcam: React.FC<WebcamProps> = ({
                 
             } catch (error) {
                 console.error('[Webcam] Initialization error:', error);
+                
+                const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+                
+                // Handle permission denied specifically
+                if (errorMessage.includes('Permission denied') || 
+                    errorMessage.includes('NotAllowedError') || 
+                    errorMessage.includes('Permission dismissed')) {
+                    
+                    setNewAlert(dispatch, { 
+                        msg: "Camera permissions were denied. Motion controls are turned off.", 
+                        alertType: "error" 
+                    });
+                    
+                    if (onError) onError();
+                }
+
                 setDebugState(prev => ({ 
                     ...prev, 
-                    lastError: error instanceof Error ? error.message : 'Unknown error',
+                    lastError: errorMessage,
                     status: 'Error initializing'
                 }));
             }
@@ -530,7 +559,7 @@ const Webcam: React.FC<WebcamProps> = ({
                 poseRef.current.close();
             }
         };
-    }, [onHandResults, onPoseResults]);
+    }, [onHandResults, onPoseResults, enabled, dispatch, onError]);
 
     return (
         <Box
