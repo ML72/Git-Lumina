@@ -117,7 +117,7 @@ const Results: React.FC = () => {
       setQuery('');
   };
 
-  const handleSectionToggle = (section: 'insights' | 'quests' | 'cortex') => {
+  const handleSectionToggle = (section: 'insights' | 'quests' | 'cortex' | 'categories') => {
       if (activeSection === section) {
         setActiveSection(null);
       } else {
@@ -334,7 +334,7 @@ const Results: React.FC = () => {
                                     TOP CATEGORIES
                                 </Typography>
                                 <Box sx={{ display: 'flex', gap: 1, mt: 1, flexWrap: 'wrap' }}>
-                                    {graph?.categories.slice(0, 5).map((cat, i) => (
+                                    {graph?.categories.slice(0, 5).map((cat: any, i: number) => (
                                         <Chip 
                                             key={cat} 
                                             label={cat} 
@@ -371,13 +371,13 @@ const Results: React.FC = () => {
                         
                         <Collapse in={activeSection === 'categories'}>
                             <List disablePadding sx={{ pb: 1 }}>
-                                {graph.categories.map((category, idx) => {
+                                {graph.categories.map((category: any, idx: number) => {
                                     const color = CATEGORY_COLORS[idx % CATEGORY_COLORS.length];
-                                    const fileCount = graph.nodes.filter(n => n.category === idx).length;
+                                    const fileCount = graph.nodes.filter((n: any) => n.category === idx).length;
                                     const isOpen = expandedCategories[idx];
                                     
                                     // Optimization: filter files only if open
-                                    const files = isOpen ? graph.nodes.filter(n => n.category === idx) : [];
+                                    const files = isOpen ? graph.nodes.filter((n: any) => n.category === idx) : [];
 
                                     return (
                                         <React.Fragment key={category}>
@@ -399,7 +399,7 @@ const Results: React.FC = () => {
                                             
                                             <Collapse in={isOpen} timeout="auto" unmountOnExit>
                                                 <List disablePadding sx={{ bgcolor: 'rgba(0,0,0,0.1)', mb: 1 }}>
-                                                    {files.map((node) => (
+                                                    {files.map((node: any) => (
                                                         <ListItemButton key={node.filepath} sx={{ pl: 4, py: 0.5, minHeight: 0 }}>
                                                             <ListItemIcon sx={{ minWidth: 24 }}>
                                                                 <FileIcon sx={{ fontSize: 16, color: 'rgba(255,255,255,0.3)' }} />
