@@ -39,6 +39,9 @@ const GraphDisplay = forwardRef<GraphDisplayRef, GraphDisplayProps>(({ cursors, 
     const [selectedNodeData, setSelectedNodeData] = useState<any | null>(null);
     const [isModalOpen, setIsModalOpen] = useState(false);
     
+    // State for highlighting nodes
+    const [activeNodeIds, setActiveNodeIds] = useState<string[]>([]);
+    
     // Track accumulated camera state for gesture controls
     const cameraStateRef = useRef({
         panX: 0,
@@ -71,23 +74,30 @@ const GraphDisplay = forwardRef<GraphDisplayRef, GraphDisplayProps>(({ cursors, 
     const { nodes, edges } = useMemo(() => {
         if (!graphData) return { nodes: [], edges: [] };
 
-        const myNodes: GraphNode[] = graphData.nodes.map((node: any, index: number) => ({
-            id: index.toString(), // Using index as ID to match edge source/target
-            label: node.filepath,
-            fill: categoryColors[node.category % categoryColors.length] || '#CCCCCC',
-            data: node, // Storing code data for potential click interaction
-            size: 7 // Default size
-        }));
+        const myNodes: GraphNode[] = graphData.nodes.map((node: any, index: number) => {
+            const nodeId = index.toString();
+            const isActive = activeNodeIds.includes(nodeId);
+            
+            return {
+                id: nodeId, // Using index as ID to match edge source/target
+                label: node.filepath,
+                fill: categoryColors[node.category % categoryColors.length] || '#CCCCCC',
+                data: node, // Storing code data for potential click interaction
+                size: 7,
+                opacity: activeNodeIds.length === 0 || isActive ? 1 : 0.4
+            };
+        });
 
         const myEdges: GraphEdge[] = graphData.edges.map((edge: any, index: number) => ({
             id: `edge-${index}`,
             source: edge[0].toString(),
             target: edge[1].toString(),
-            size: edge[2] || 1 // Use weight for edge width (size)
+            size: edge[2] || 1, // Use weight for edge width (size)
+            opacity: activeNodeIds.length > 0 ? 0.1 : 0.5
         }));
 
         return { nodes: myNodes, edges: myEdges };
-    }, [graphData]);
+    }, [graphData, activeNodeIds]);
 
     // Track frame count for debug logging
     const frameCountRef = useRef(0);
@@ -196,12 +206,24 @@ const GraphDisplay = forwardRef<GraphDisplayRef, GraphDisplayProps>(({ cursors, 
                 
             if (targetIds.length > 0) {
                 console.log(`[GraphDisplay] Focusing on nodes: ${targetIds.join(', ')}`);
-                graphRef.current.fitNodesInView(targetIds);
+                setActiveNodeIds(targetIds); // Highlight the focused nodes
+                // Default fit strategy
+                graphRef.current.fitNodesInView(targetIds); 
             } else {
+                setActiveNodeIds([]); // Clear highlighting if no match
                 console.warn('[GraphDisplay] focusNodes: No matching nodes found for', nodeIdsOrFilepaths);
             }
+        } else {
+            // Empty input = clear selection
+            setActiveNodeIds([]);
         }
     }, [nodes]);
+
+    // Handle clicking empty space to reset
+    const handleCanvasClick = useCallback(() => {
+        // Clear active selection
+        setActiveNodeIds([]);
+    }, []);
     
     // Expose methods to parent
     useImperativeHandle(ref, () => ({
@@ -213,12 +235,12 @@ const GraphDisplay = forwardRef<GraphDisplayRef, GraphDisplayProps>(({ cursors, 
 
     useEffect(() => {
         if (graphRef.current && nodes.length > 0) {
-            // Slight delay to allow layout to stabilize before fitting
-            setTimeout(() => {
-                graphRef.current?.fitNodesInView();
-            }, 1000);
+            // Initial fit
+            graphRef.current.fitNodesInView();
         }
-    }, [nodes]);
+        // Removing [nodes] dependency to prevent refitting on updates
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
     
     // Track previous gesture active state to detect transitions
     const wasGestureActiveRef = useRef(false);
@@ -322,13 +344,21 @@ const GraphDisplay = forwardRef<GraphDisplayRef, GraphDisplayProps>(({ cursors, 
                 ref={graphRef}
                 nodes={nodes}
                 edges={edges}
+                // actives={activeNodeIds} // Removed to avoid color override
                 layoutType="forceDirected3d"
                 labelType="all"
-                theme={theme.palette.mode === 'dark' ? darkTheme : lightTheme}
+                theme={{
+                    ...theme.palette.mode === 'dark' ? darkTheme : lightTheme,
+                    canvas: {
+                         ...theme.palette.mode === 'dark' ? darkTheme.canvas : lightTheme.canvas,
+                         fog: '#1e2329', // Match background
+                    }
+                }}
                 draggable
                 animated={!isGestureActive} // Pause animation when user is controlling with gestures
                 cameraMode={cameraMode}
                 onNodeClick={handleNodeClick}
+                onCanvasClick={handleCanvasClick}
                 layoutOverrides={{
                     nodeStrength: -1000,
                     linkDistance: 150

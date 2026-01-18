@@ -423,6 +423,10 @@ const Results: React.FC = () => {
   };
 
   const handleSectionToggle = (section: 'insights' | 'quests' | 'cortex' | 'categories') => {
+      if (activeSection !== section && graphDisplayRef.current) {
+        graphDisplayRef.current.resetView();
+      }
+
       if (activeSection === section) {
         setActiveSection('');
       } else {
