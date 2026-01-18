@@ -52,7 +52,7 @@ export async function generateQuests(
             "title": "Quest Title",
             "description": "Short description (max 10 words)",
             "relevant_files": ["src/main.ts"],
-            "hint": "A detailed educational formulation answering: WHY these files are relevant and WHAT specific logic the user should examine. (1-2 sentences)"
+            "hint": "A structured insight. Use at most 2 bullet points (•) and newlines to separate key concepts. Explain WHY these files matter and WHAT logic to look for. Be concise."
         }
       ]
     }`;

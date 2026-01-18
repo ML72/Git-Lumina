@@ -51,7 +51,7 @@ import CustomPage from '../components/CustomPage';
 import GraphDisplay, { GraphDisplayRef } from '../components/GraphDisplay';
 import Webcam, { GestureState } from '../components/Webcam';
 import useGestureControls, { GestureControlState } from '../hooks/useGestureControls';
-import { selectGraph } from '../store/slices/graph';
+import { selectGraph, selectName } from '../store/slices/graph';
 import { selectOpenAiKey } from '../store/slices/api';
 import { CodebaseGraph } from '../types/CodebaseGraph';
 import { generateQuests } from '../utils/openaiQuests';
@@ -71,6 +71,7 @@ const Results: React.FC = () => {
   const theme = useTheme();
   const location = useLocation();
   const graph = useSelector(selectGraph);
+  const repoName = useSelector(selectName);
   const apiKey = useSelector(selectOpenAiKey);
   const [query, setQuery] = useState('');
   const [webcamEnabled, setWebcamEnabled] = useState(true);
@@ -103,6 +104,9 @@ const Results: React.FC = () => {
   
   // Try to retrieve large graph from navigation state if available
   const largeGraph = location.state?.largeGraph;
+  
+  // MERGED GRAPH SOURCE: Use largeGraph if passed via navigation, or graph from Redux
+  const displayGraph = (largeGraph || graph) as CodebaseGraph | null;
   
   const messagesContainerRef = useRef<HTMLDivElement>(null);
 
@@ -140,17 +144,17 @@ const Results: React.FC = () => {
   
   // Compute category statistics
   const categoryStats = React.useMemo(() => {
-    if (!graph?.nodes || !graph?.categories) return [];
+    if (!displayGraph?.nodes || !displayGraph?.categories) return [];
     
     // Initialize stats
-    const stats = graph.categories.map((cat: any) => ({
+    const stats = displayGraph.categories.map((cat: any) => ({
         name: cat,
         files: 0,
         lines: 0
     }));
 
     // Aggregate from nodes
-    graph.nodes.forEach((node: any) => {
+    displayGraph.nodes.forEach((node: any) => {
         const cat = node.category;
         if (stats[cat]) {
             stats[cat].files++;
@@ -160,19 +164,19 @@ const Results: React.FC = () => {
 
     // Sort by file count descending
     return stats.sort((a: any, b: any) => b.files - a.files);
-  }, [graph]);
+  }, [displayGraph]);
 
   const totalLoc = React.useMemo(() => {
-    return graph?.nodes?.reduce((acc: number, node: any) => acc + (node.num_lines || 0), 0) || 0;
-  }, [graph]);
+    return displayGraph?.nodes?.reduce((acc: number, node: any) => acc + (node.num_lines || 0), 0) || 0;
+  }, [displayGraph]);
 
   const languageStats = React.useMemo(() => {
-    if (!graph?.nodes) return [];
+    if (!displayGraph?.nodes) return [];
 
     const stats: Record<string, number> = {};
     let calculatedTotalLoc = 0;
 
-    graph.nodes.forEach((node: any) => {
+    displayGraph.nodes.forEach((node: any) => {
       const lang = getLanguageFromExtension(node.filepath);
       const loc = node.num_lines || 0;
       stats[lang] = (stats[lang] || 0) + loc;
@@ -186,7 +190,7 @@ const Results: React.FC = () => {
         percentage: calculatedTotalLoc > 0 ? (lines / calculatedTotalLoc) * 100 : 0
       }))
       .sort((a, b) => b.lines - a.lines);
-  }, [graph]);
+  }, [displayGraph]);
 
   // Quest data and state
   interface QuestState {
@@ -208,12 +212,12 @@ const Results: React.FC = () => {
 
   // Update quests based on repository analysis
   useEffect(() => {
-    const activeGraph = (graph || largeGraph) as CodebaseGraph;
-    if (!activeGraph?.nodes?.length || !apiKey) return;
+    // Already defined displayGraph above
+    if (!displayGraph?.nodes?.length || !apiKey) return;
 
     // Avoid regenerating if we already have quests and the graph hasn't changed (simplified check)
     // For now, we'll just merge state to preserve completion status
-    generateQuests(activeGraph.nodes, apiKey)
+    generateQuests(displayGraph.nodes, apiKey)
       .then(newQuests => {
         if (newQuests && newQuests.length > 0) {
           setQuests(prev => {
@@ -233,7 +237,7 @@ const Results: React.FC = () => {
         }
       })
       .catch(console.error);
-  }, [graph, largeGraph, apiKey]);
+  }, [displayGraph, apiKey]);
   
   const toggleQuestCompletion = (questId: number) => {
     setQuests(prev => prev.map(q => 
@@ -397,6 +401,7 @@ const Results: React.FC = () => {
           // Set camera mode to orbit when returning to standard view
           graphDisplayRef.current.setCameraMode('orbit');
         }
+        setActiveHint(null);
         noHandsTimerRef.current = null;
         hadHandsRef.current = false;
       }, AUTO_RESET_DELAY);
@@ -423,9 +428,11 @@ const Results: React.FC = () => {
   };
 
   const handleSectionToggle = (section: 'insights' | 'quests' | 'cortex' | 'categories') => {
-      if (activeSection !== section && graphDisplayRef.current) {
+      // Always reset view and dismiss hints when toggling sections
+      if (graphDisplayRef.current) {
         graphDisplayRef.current.resetView();
       }
+      setActiveHint(null);
 
       if (activeSection === section) {
         setActiveSection('');
@@ -460,6 +467,7 @@ const Results: React.FC = () => {
   
   // Reset graph view
   const handleResetView = useCallback(() => {
+    setActiveHint(null);
     if (graphDisplayRef.current) {
       graphDisplayRef.current.resetView();
     }
@@ -492,14 +500,17 @@ const Results: React.FC = () => {
         >
           {/* Header Section */}
           <Box sx={{ p: 3, borderBottom: `1px solid ${theme.palette.divider}`, display: isSidebarOpen ? 'block' : 'none' }}>
-            <Typography variant="h5" fontWeight="bold" gutterBottom noWrap>
-              {graph?.name || 'Repository'}
+            <Typography variant="subtitle2" sx={{ color: '#a371f7', fontWeight: 'bold', letterSpacing: 1, textTransform: 'uppercase', display: 'block', mb: 0.5 }}>
+              Git Lumina 🪄
+            </Typography>
+            <Typography variant="h5" fontWeight="bold" gutterBottom sx={{ wordBreak: 'break-word', lineHeight: 1.2 }}>
+              {(repoName || 'Repository').replace(/\.zip$/i, '')}
             </Typography>
             
             <Stack direction="row" spacing={3} sx={{ color: 'text.secondary', mt: 1 }}>
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
                 <FileIcon fontSize="small" />
-                <Typography variant="body2">{graph?.nodes?.length || 0} Files</Typography>
+                <Typography variant="body2">{displayGraph?.nodes?.length || 0} Files</Typography>
               </Box>
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
                 <CodeIcon fontSize="small" />
@@ -541,7 +552,7 @@ const Results: React.FC = () => {
                         <Collapse in={activeSection === 'insights'}>
                             <Box sx={{ px: 2, pb: 2 }}>
                                 <Typography variant="body2" paragraph sx={{ whiteSpace: 'normal', color: 'rgba(255,255,255,0.7)', mb: 2 }}>
-                                    {graph?.nodes ? `${graph.nodes.length} files analyzed across ${graph.categories.length} categories.` : "Analyzing repository structure..."}
+                                    {displayGraph?.nodes ? `${displayGraph.nodes.length} files analyzed across ${displayGraph.categories.length} categories.` : "Analyzing repository structure..."}
                                 </Typography>
 
                                 {/* Language Breakdown */}
@@ -589,13 +600,9 @@ const Results: React.FC = () => {
                                     TOP CATEGORIES
                                 </Typography>
                                 
-
-                                <Typography variant="caption" fontWeight="bold" sx={{ mt: 1, display: 'block', color: 'rgba(255,255,255,0.5)' }}>
-                                    TOP CATEGORIES
-                                </Typography>
                                 <List dense sx={{ mt: 1, p: 0 }}>
                                     {categoryStats.slice(0, 5).map((stat: any, i: number) => {
-                                        const colorIndex = graph?.categories.indexOf(stat.name) ?? i;
+                                        const colorIndex = displayGraph?.categories.indexOf(stat.name) ?? i;
                                         const color = CATEGORY_COLORS[colorIndex % CATEGORY_COLORS.length];
                                         return (
                                             <ListItem key={stat.name} sx={{ 
@@ -638,7 +645,7 @@ const Results: React.FC = () => {
                     </Box>
 
                     {/* NEW: Categories Section */}
-                    {graph && (
+                    {displayGraph && (
                     <Box sx={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
                         <Box 
                             sx={{ p: 2, display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer', '&:hover': { bgcolor: 'rgba(255,255,255,0.03)' } }}
@@ -655,13 +662,13 @@ const Results: React.FC = () => {
                         
                         <Collapse in={activeSection === 'categories'}>
                             <List disablePadding sx={{ pb: 1 }}>
-                                {graph.categories.map((category: string, idx: number) => {
+                                {displayGraph.categories.map((category: string, idx: number) => {
                                     const color = CATEGORY_COLORS[idx % CATEGORY_COLORS.length];
-                                    const fileCount = graph.nodes.filter((n: any) => n.category === idx).length;
+                                    const fileCount = displayGraph.nodes.filter((n: any) => n.category === idx).length;
                                     const isOpen = expandedCategories[idx];
                                     
                                     // Optimization: filter files only if open
-                                    const files = isOpen ? graph.nodes.filter((n: any) => n.category === idx) : [];
+                                    const files = isOpen ? displayGraph.nodes.filter((n: any) => n.category === idx) : [];
 
                                     return (
                                         <React.Fragment key={category}>
@@ -978,11 +985,28 @@ const Results: React.FC = () => {
                     <LightbulbIcon sx={{ color: '#FFD700' }} />
                     <Box sx={{ flex: 1 }}>
                         <Typography variant="subtitle2" fontWeight="bold" color="#fff" gutterBottom>
-                            Quest Insight
+                            Insight
                         </Typography>
-                        <Typography variant="body2" color="rgba(255,255,255,0.8)">
-                            {activeHint}
-                        </Typography>
+                        <Box sx={{ color: 'rgba(255,255,255,0.8)', typography: 'body2' }}>
+                            {activeHint && activeHint.split('\n').filter(l => l.trim().length > 0).map((line, i) => {
+                                const isBullet = line.trim().startsWith('•');
+                                if (isBullet) {
+                                    return (
+                                        <Box key={i} sx={{ display: 'flex', gap: 1.5, mb: 0.5, alignItems: 'flex-start' }}>
+                                            <Typography variant="body2" sx={{ color: '#FFD700', lineHeight: 1.6 }}>•</Typography>
+                                            <Typography variant="body2" sx={{ lineHeight: 1.6 }}>
+                                                {line.trim().replace(/^•\s*/, '')}
+                                            </Typography>
+                                        </Box>
+                                    );
+                                }
+                                return (
+                                    <Typography key={i} variant="body2" sx={{ display: 'block', mb: 1.5, lineHeight: 1.6 }}>
+                                        {line.trim()}
+                                    </Typography>
+                                );
+                            })}
+                        </Box>
                     </Box>
                     <IconButton size="small" onClick={() => setActiveHint(null)} sx={{ color: 'rgba(255,255,255,0.5)', mt: -0.5, mr: -0.5 }}>
                         <CloseIcon fontSize="small" />

@@ -59,7 +59,7 @@ const Landing: React.FC = () => {
   const [newExcludePath, setNewExcludePath] = useState('');
 
   // New state for GitHub integration
-  const [uploadMode, setUploadMode] = useState<'upload' | 'github'>('upload');
+  const [uploadMode, setUploadMode] = useState<'upload' | 'github'>('github');
   const [githubUrl, setGithubUrl] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);

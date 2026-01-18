@@ -178,6 +178,9 @@ const GraphDisplay = forwardRef<GraphDisplayRef, GraphDisplayProps>(({ cursors, 
             panY: 0,
             zoom: 1
         };
+        setActiveNodeIds([]);
+        setSelectedNodeData(null);
+        setIsModalOpen(false);
     }, []);
 
     const focusNodes = useCallback((nodeIdsOrFilepaths: string[]) => {
