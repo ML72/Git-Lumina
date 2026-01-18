@@ -59,40 +59,42 @@ const Landing: React.FC = () => {
     }
   };
 
-  const handleGithubDownload = async () => {
-    if (!repoUrl) return;
+  // Helper to fetch zip from GitHub if repoUrl is provided
+  const fetchZipFromRepoUrl = async (repoUrl: string): Promise<File> => {
     let zipUrl = repoUrl.trim();
-    // If user pasted a repo, not a zip, convert to zip URL
     if (!zipUrl.endsWith('.zip')) {
-      // Remove trailing slash if present
       zipUrl = zipUrl.replace(/\/$/, '');
       zipUrl += '/archive/refs/heads/main.zip';
     }
-    // Ensure protocol
     if (!/^https?:\/\//i.test(zipUrl)) {
       zipUrl = 'https://' + zipUrl;
     }
     const proxyUrl = `https://cors-proxy-murex-three.vercel.app/api/cors?url=${encodeURIComponent(zipUrl)}`;
-    try {
-      const res = await fetch(proxyUrl);
-      if (!res.ok) throw new Error('Failed to fetch zip');
-      const blob = await res.blob();
-      const file = new File([blob], "repo.zip", { type: "application/zip" });
-      setFileName(file.name);
-      setZipFile(file);
-    } catch (e) {
-      alert('Failed to download zip from GitHub.');
-    }
+    const res = await fetch(proxyUrl);
+    if (!res.ok) throw new Error('Failed to fetch zip');
+    const blob = await res.blob();
+    return new File([blob], 'repo.zip', { type: 'application/zip' });
   };
 
-  const handleStartAnalysis = () => {
+  const handleStartAnalysis = async () => {
+    let fileToAnalyze = zipFile;
+    if (!fileToAnalyze && repoUrl) {
+      try {
+        fileToAnalyze = await fetchZipFromRepoUrl(repoUrl);
+        setFileName(fileToAnalyze.name);
+        setZipFile(fileToAnalyze);
+      } catch (e) {
+        alert('Failed to download zip from GitHub.');
+        return;
+      }
+    }
     console.log('Starting analysis with:', {
       source: fileName,
       apiKey,
       settings: { is3D, includeTests, fileExtensions },
-      zipFile
+      zipFile: fileToAnalyze
     });
-    // Add logic to dispatch action or navigate, using zipFile
+    // Add logic to dispatch action or navigate, using fileToAnalyze
   };
 
   // Feature card component
@@ -304,9 +306,6 @@ const Landing: React.FC = () => {
                     onChange={e => setRepoUrl(e.target.value)}
                     sx={{ mb: 2 }}
                   />
-                  <Button onClick={handleGithubDownload} disabled={!repoUrl} sx={{ mb: 2 }}>
-                    Download from GitHub
-                  </Button>
 
                   {/* File Upload Input */}
                   <Box 
