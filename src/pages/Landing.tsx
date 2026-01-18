@@ -76,6 +76,9 @@ const Landing: React.FC = () => {
     // Normalize URL to remove .git or trailing slashes
     let cleanUrl = repoUrl.replace(/\/$/, '').replace(/\.git$/, '');
     
+    // Extract repo name for the file
+    const repoName = cleanUrl.split('/').pop() || 'repository';
+    
     // Define potential download URLs
     const targets = [
         `${cleanUrl}/archive/refs/heads/main.zip`,
@@ -108,7 +111,7 @@ const Landing: React.FC = () => {
                      throw new Error("Response too small, likely an error page.");
                 }
 
-                return new File([blob], "repository.zip", { type: 'application/zip' });
+                return new File([blob], `${repoName}.zip`, { type: 'application/zip' });
             } catch (err) {
                 console.warn(`Download failed for ${targetUrl}:`, err);
                 lastError = err;

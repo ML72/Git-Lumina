@@ -1,5 +1,11 @@
-import React, { useMemo, useRef, useEffect, useCallback, useImperativeHandle, forwardRef, useState } from 'react';
-import { Box, Typography, useTheme } from '@mui/material';
+import React, { useMemo, useRef, useEffect, useCallback, useImperativeHandle, forwardRef, useState, useState } from 'react';
+import { Box, Typography, useTheme, Dialog, DialogTitle, DialogContent, DialogActions, Button, Divider, List, ListItem, ListItemText, Grid, Chip, alpha, Paper } from '@mui/material';
+import IconButton from '@mui/material/IconButton';
+import CloseIcon from '@mui/icons-material/Close';
+import DescriptionIcon from '@mui/icons-material/Description';
+import CodeIcon from '@mui/icons-material/Code';
+import AccountTreeIcon from '@mui/icons-material/AccountTree';
+import NumbersIcon from '@mui/icons-material/Numbers';
 import { useSelector } from 'react-redux';
 import { GraphCanvas, GraphNode, GraphEdge, darkTheme, lightTheme, GraphCanvasRef } from 'reagraph';
 import { selectGraph } from '../store/slices/graph';
@@ -28,6 +34,10 @@ const GraphDisplay = forwardRef<GraphDisplayRef, GraphDisplayProps>(({ cursors, 
     // Camera mode state - can be changed dynamically
     const [cameraMode, setCameraMode] = useState<'rotate' | 'orbit' | 'pan'>('rotate');
     
+    // State for modal
+    const [selectedNodeData, setSelectedNodeData] = useState<any | null>(null);
+    const [isModalOpen, setIsModalOpen] = useState(false);
+    
     // Track accumulated camera state for gesture controls
     const cameraStateRef = useRef({
         panX: 0,
@@ -49,6 +59,12 @@ const GraphDisplay = forwardRef<GraphDisplayRef, GraphDisplayProps>(({ cursors, 
         '#BA68C8', // Purple
         '#F0F4C3', // Lime
         '#7986CB', // Indigo
+        '#E57373', // Light Red
+        '#4DB6AC', // Light Teal
+        '#4FC3F7', // Light Blue
+        '#FFB74D', // Light Orange
+        '#A5D6A7', // Light Mint
+        '#F48FB1'  // Light Pink
     ];
 
     const { nodes, edges } = useMemo(() => {
@@ -208,9 +224,18 @@ const GraphDisplay = forwardRef<GraphDisplayRef, GraphDisplayProps>(({ cursors, 
             controls.polarRotateSpeed = originalSettingsRef.current.polar;
             controls.dampingFactor = 0.1;
         }
-        
         wasGestureActiveRef.current = isGestureActive;
     }, [isGestureActive]);
+
+    const handleNodeClick = (node: GraphNode) => {
+        setSelectedNodeData(node.data);
+        setIsModalOpen(true);
+    };
+
+    const handleCloseModal = () => {
+        setIsModalOpen(false);
+        setSelectedNodeData(null);
+    };
 
     if (!graphData) {
         return (
@@ -268,11 +293,250 @@ const GraphDisplay = forwardRef<GraphDisplayRef, GraphDisplayProps>(({ cursors, 
                 draggable
                 animated={!isGestureActive} // Pause animation when user is controlling with gestures
                 cameraMode={cameraMode}
+                onNodeClick={handleNodeClick}
                 layoutOverrides={{
                     nodeStrength: -1000,
                     linkDistance: 150
                 }}
             />
+
+            <Dialog
+                open={isModalOpen}
+                onClose={handleCloseModal}
+                maxWidth="md"
+                fullWidth
+                PaperProps={{
+                    sx: {
+                        bgcolor: '#1e2329',
+                        color: 'white',
+                        border: '1px solid rgba(255,255,255,0.1)',
+                        backgroundImage: 'linear-gradient(rgba(255, 255, 255, 0.02), rgba(255, 255, 255, 0))',
+                        borderRadius: 3,
+                        boxShadow: '0 24px 48px rgba(0,0,0,0.5)'
+                    }
+                }}
+                BackdropProps={{
+                    sx: {
+                        backdropFilter: 'blur(4px)',
+                        backgroundColor: 'rgba(0, 0, 0, 0.7)'
+                    }
+                }}
+            >
+                {selectedNodeData && (
+                    <>
+                        <DialogTitle sx={{ 
+                            p: 3, 
+                            display: 'flex', 
+                            justifyContent: 'space-between', 
+                            alignItems: 'flex-start',
+                            borderBottom: '1px solid rgba(255,255,255,0.08)'
+                        }}>
+                            <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
+                                <Box sx={{ 
+                                    p: 1.5, 
+                                    borderRadius: 2, 
+                                    bgcolor: alpha(categoryColors[selectedNodeData.category % categoryColors.length] || '#79c0ff', 0.15),
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center'
+                                }}>
+                                    <DescriptionIcon sx={{ color: categoryColors[selectedNodeData.category % categoryColors.length] || '#79c0ff' }} />
+                                </Box>
+                                <Box>
+                                    <Typography variant="h6" sx={{ fontWeight: 600, letterSpacing: '0.5px' }}>
+                                        {selectedNodeData.filepath}
+                                    </Typography>
+                                    <Box sx={{ display: 'flex', gap: 1, mt: 0.5, alignItems: 'center' }}>
+                                        <Chip 
+                                            label={graphData.categories[selectedNodeData.category]} 
+                                            size="small" 
+                                            sx={{ 
+                                                height: 24,
+                                                fontSize: '0.75rem',
+                                                fontWeight: 600,
+                                                bgcolor: alpha(categoryColors[selectedNodeData.category % categoryColors.length] || '#fff', 0.1),
+                                                color: categoryColors[selectedNodeData.category % categoryColors.length] || '#fff',
+                                                border: `1px solid ${alpha(categoryColors[selectedNodeData.category % categoryColors.length] || '#fff', 0.2)}`
+                                            }} 
+                                        />
+                                        <Typography variant="caption" color="text.secondary">
+                                            ID: {selectedNodeData.id || 'N/A'}
+                                        </Typography>
+                                    </Box>
+                                </Box>
+                            </Box>
+                            <IconButton 
+                                onClick={handleCloseModal} 
+                                sx={{ 
+                                    color: 'rgba(255,255,255,0.5)', 
+                                    '&:hover': { color: 'white', bgcolor: 'rgba(255,255,255,0.1)' } 
+                                }}
+                            >
+                                <CloseIcon />
+                            </IconButton>
+                        </DialogTitle>
+                        
+                        <DialogContent sx={{ px: 3, pb: 0, pt: 0 }}>
+                            <Grid container spacing={2} direction="column">
+                                {/* Stats Cards */}
+                                <Grid size={{ xs: 12 }} sx={{ mt: 3 }}>
+                                    <Paper sx={{ 
+                                        py: 2.5,
+                                        px: 2.5, 
+                                        bgcolor: 'rgba(255,255,255,0.03)', 
+                                        borderRadius: 3,
+                                        border: '1px solid rgba(255,255,255,0.05)'
+                                    }}>
+                                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
+                                            <NumbersIcon fontSize="small" sx={{ color: '#79c0ff' }} />
+                                            <Typography variant="subtitle2" sx={{ fontWeight: 600, color: '#79c0ff' }}>
+                                                METRICS
+                                            </Typography>
+                                        </Box>
+                                        
+                                        <Grid container spacing={2}>
+                                            <Grid size={{ xs: 6 }}>
+                                                <Typography variant="caption" sx={{ color: 'rgba(255,255,255,0.5)', display: 'block', mb: 0.5 }}>
+                                                    Lines of Code
+                                                </Typography>
+                                                <Typography variant="h5" sx={{ fontWeight: 500 }}>
+                                                    {selectedNodeData.num_lines?.toLocaleString() || 0}
+                                                </Typography>
+                                            </Grid>
+                                            <Grid size={{ xs: 6 }}>
+                                                <Typography variant="caption" sx={{ color: 'rgba(255,255,255,0.5)', display: 'block', mb: 0.5 }}>
+                                                    Characters
+                                                </Typography>
+                                                <Typography variant="h5" sx={{ fontWeight: 500 }}>
+                                                    {selectedNodeData.num_characters?.toLocaleString() || 0}
+                                                </Typography>
+                                            </Grid>
+                                        </Grid>
+                                    </Paper>
+                                </Grid>
+                                
+                                {/* Dependencies Card */}
+                                <Grid size={{ xs: 12 }} sx={{ mt: 3 }}>
+                                    <Paper sx={{ 
+                                        p: 2.5, 
+                                        bgcolor: 'rgba(255,255,255,0.03)', 
+                                        borderRadius: 3,
+                                        border: '1px solid rgba(255,255,255,0.05)',
+                                        display: 'flex',
+                                        flexDirection: 'column'
+                                    }}>
+                                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
+                                            <AccountTreeIcon fontSize="small" sx={{ color: '#A5D6A7' }} />
+                                            <Typography variant="subtitle2" sx={{ fontWeight: 600, color: '#A5D6A7' }}>
+                                                DEPENDENCIES
+                                            </Typography>
+                                            {selectedNodeData.fileDependencies?.length > 0 && (
+                                                <Chip label={selectedNodeData.fileDependencies.length} size="small" sx={{ height: 16, fontSize: '0.65rem', bgcolor: 'rgba(255,255,255,0.1)' }} />
+                                            )}
+                                        </Box>
+                                        
+                                        <Box sx={{ flex: 1 }}>
+                                            {selectedNodeData.fileDependencies && selectedNodeData.fileDependencies.length > 0 ? (
+                                                <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
+                                                    {selectedNodeData.fileDependencies.map((dep: string) => (
+                                                        <Chip 
+                                                            key={dep} 
+                                                            label={dep} 
+                                                            size="small" 
+                                                            sx={{ 
+                                                                bgcolor: 'rgba(255,255,255,0.05)', 
+                                                                color: 'rgba(255,255,255,0.8)',
+                                                                border: '1px solid rgba(255,255,255,0.1)',
+                                                                '&:hover': { bgcolor: 'rgba(255,255,255,0.1)' }
+                                                            }} 
+                                                        />
+                                                    ))}
+                                                </Box>
+                                            ) : (
+                                                <Typography variant="body2" sx={{ color: 'rgba(255,255,255,0.3)', fontStyle: 'italic' }}>
+                                                    No explicit dependencies detected
+                                                </Typography>
+                                            )}
+                                        </Box>
+                                    </Paper>
+                                </Grid>
+
+                                {/* Functions Section */}
+                                <Grid size={{ xs: 12 }} sx={{ mt: 2 }}>
+                                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1.5, px: 0.5 }}>
+                                        <CodeIcon fontSize="small" sx={{ color: '#FFD54F' }} />
+                                        <Typography variant="subtitle2" sx={{ fontWeight: 600, color: '#FFD54F' }}>
+                                            FUNCTIONS & METHODS
+                                        </Typography>
+                                        <Typography variant="caption" sx={{ color: 'rgba(255,255,255,0.5)' }}>
+                                            ({selectedNodeData.functions ? Object.keys(selectedNodeData.functions).length : 0})
+                                        </Typography>
+                                    </Box>
+                                    
+                                    <Paper sx={{ 
+                                        bgcolor: 'rgba(0,0,0,0.2)', 
+                                        borderRadius: 3,
+                                        border: '1px solid rgba(255,255,255,0.05)',
+                                        overflow: 'hidden'
+                                    }}>
+                                        {selectedNodeData.functions && Object.keys(selectedNodeData.functions).length > 0 ? (
+                                            <List disablePadding sx={{ p: 1 }}>
+                                                {Object.entries(selectedNodeData.functions).map(([name, details]: [string, any], index: number) => (
+                                                    <React.Fragment key={name}>
+                                                        <ListItem sx={{ 
+                                                            py: 1.5, 
+                                                            px: 2, 
+                                                            borderRadius: 2,
+                                                            mb: 0.5,
+                                                            '&:hover': { bgcolor: 'rgba(255,255,255,0.04)' } 
+                                                        }}>
+                                                            <ListItemText 
+                                                                primary={
+                                                                    <Typography variant="body2" sx={{ fontFamily: 'monospace', color: '#ff7b72', fontWeight: 500 }}>
+                                                                        {name}()
+                                                                    </Typography>
+                                                                } 
+                                                                secondary={
+                                                                    <Typography variant="caption" sx={{ color: 'rgba(255,255,255,0.4)', display: 'flex', gap: 2, mt: 0.5 }}>
+                                                                        <span>Line {details.line_start}</span>
+                                                                        <span>•</span>
+                                                                        <span>{details.line_count} lines</span>
+                                                                    </Typography>
+                                                                }
+                                                            />
+                                                        </ListItem>
+                                                    </React.Fragment>
+                                                ))}
+                                            </List>
+                                        ) : (
+                                            <Box sx={{ p: 4, textAlign: 'center' }}>
+                                                <Typography variant="body2" sx={{ color: 'rgba(255,255,255,0.3)' }}>
+                                                    No functions detected in this file
+                                                </Typography>
+                                            </Box>
+                                        )}
+                                    </Paper>
+                                </Grid>
+                            </Grid>
+                        </DialogContent>
+                        <DialogActions sx={{ p: 2, px: 3 }}>
+                            <Button 
+                                onClick={handleCloseModal} 
+                                sx={{ 
+                                    color: 'white', 
+                                    textTransform: 'none', 
+                                    fontWeight: 500,
+                                    px: 3,
+                                    borderRadius: 2,
+                                    '&:hover': { bgcolor: 'rgba(255,255,255,0.08)' }
+                                }}
+                            >
+                                Close
+                            </Button>
+                        </DialogActions>
+                    </>
+                )}
+            </Dialog>
         </Box>
     );
 });

@@ -51,6 +51,10 @@ import GraphDisplay, { GraphDisplayRef } from '../components/GraphDisplay';
 import Webcam, { GestureState } from '../components/Webcam';
 import useGestureControls, { GestureControlState } from '../hooks/useGestureControls';
 import { selectGraph } from '../store/slices/graph';
+import { selectOpenAiKey } from '../store/slices/api';
+import { CodebaseGraph } from '../types/CodebaseGraph';
+import { generateQuests } from '../utils/openaiQuests';
+import { getLanguageFromExtension } from '../utils/languageSyntax';
 
 const CATEGORY_COLORS = [
     '#FF6B6B', '#4ECDC4', '#45B7D1', '#FFA07A', '#98D8C8',
@@ -62,20 +66,11 @@ const MOCK_CHAT = [
   { id: 1, sender: 'system', text: 'Hello! I am Cortex, acts as your AI assistant for this codebase. Ask me anything about the structure, dependencies, or specific files.' },
 ];
 
-const MOCK_INFO = {
-  name: "project-repository",
-  stats: {
-    files: 142,
-    components: 28,
-    linesOfCode: 15420
-  },
-  layers: ['Presentation', 'Business Logic', 'Data Access']
-};
-
 const Results: React.FC = () => {
   const theme = useTheme();
   const location = useLocation();
   const graph = useSelector(selectGraph);
+  const apiKey = useSelector(selectOpenAiKey);
   const [query, setQuery] = useState('');
   const [webcamEnabled, setWebcamEnabled] = useState(true);
   const [webcamVisible, setWebcamVisible] = useState(true);
@@ -142,13 +137,82 @@ const Results: React.FC = () => {
   // Section toggle state
   const [activeSection, setActiveSection] = useState<string>('insights');
   
+  // Compute category statistics
+  const categoryStats = React.useMemo(() => {
+    if (!graph?.nodes || !graph?.categories) return [];
+    
+    // Initialize stats
+    const stats = graph.categories.map((cat: any) => ({
+        name: cat,
+        files: 0,
+        lines: 0
+    }));
+
+    // Aggregate from nodes
+    graph.nodes.forEach((node: any) => {
+        const cat = node.category;
+        if (stats[cat]) {
+            stats[cat].files++;
+            stats[cat].lines += node.num_lines || 0;
+        }
+    });
+
+    // Sort by file count descending
+    return stats.sort((a: any, b: any) => b.files - a.files);
+  }, [graph]);
+
+  const totalLoc = React.useMemo(() => {
+    return graph?.nodes?.reduce((acc: number, node: any) => acc + (node.num_lines || 0), 0) || 0;
+  }, [graph]);
+
+  const languageStats = React.useMemo(() => {
+    if (!graph?.nodes) return [];
+
+    const stats: Record<string, number> = {};
+    let calculatedTotalLoc = 0;
+
+    graph.nodes.forEach((node: any) => {
+      const lang = getLanguageFromExtension(node.filepath);
+      const loc = node.num_lines || 0;
+      stats[lang] = (stats[lang] || 0) + loc;
+      calculatedTotalLoc += loc;
+    });
+
+    return Object.entries(stats)
+      .map(([lang, lines]) => ({
+        language: lang.charAt(0).toUpperCase() + lang.slice(1),
+        lines,
+        percentage: calculatedTotalLoc > 0 ? (lines / calculatedTotalLoc) * 100 : 0
+      }))
+      .sort((a, b) => b.lines - a.lines);
+  }, [graph]);
+
   // Quest data and state
   const [quests, setQuests] = useState([
-    { id: 1, title: 'Understand Entry Point', description: 'Find where the app starts', completed: false },
-    { id: 2, title: 'Explore Components', description: 'Review the component structure', completed: false },
-    { id: 3, title: 'Check State Management', description: 'Understand how data flows', completed: false },
+    { id: 1, title: 'The Origin', description: 'Where it all begins', completed: false },
+    { id: 2, title: 'The Protagonist', description: 'The main logic', completed: false },
+    { id: 3, title: 'The World', description: 'The context', completed: false },
   ]);
   const [activeQuestId, setActiveQuestId] = useState<number | null>(1);
+
+  // Update quests based on repository analysis
+  useEffect(() => {
+    const activeGraph = (graph || largeGraph) as CodebaseGraph;
+    if (!activeGraph?.nodes?.length || !apiKey) return;
+
+    generateQuests(activeGraph.nodes, apiKey)
+      .then(newQuests => {
+        if (newQuests && newQuests.length > 0) {
+          setQuests(newQuests.map(q => ({
+            id: q.id,
+            title: q.title,
+            description: q.description,
+            completed: q.completed
+          })));
+        }
+      })
+      .catch(console.error);
+  }, [graph, largeGraph, apiKey]);
   
   const toggleQuestCompletion = (questId: number) => {
     setQuests(prev => prev.map(q => 
@@ -385,22 +449,17 @@ const Results: React.FC = () => {
           {/* Header Section */}
           <Box sx={{ p: 3, borderBottom: `1px solid ${theme.palette.divider}`, display: isSidebarOpen ? 'block' : 'none' }}>
             <Typography variant="h5" fontWeight="bold" gutterBottom noWrap>
-              {graph?.name || MOCK_INFO.name}
+              {graph?.name || 'Repository'}
             </Typography>
-            <Stack direction="row" spacing={1} mb={2}>
-              <Chip label="TypeScript" size="small" color="primary" variant="outlined" />
-              <Chip label="React" size="small" color="secondary" variant="outlined" />
-              <Chip label="v1.0.2" size="small" variant="outlined" />
-            </Stack>
             
-            <Stack direction="row" spacing={3} sx={{ color: 'text.secondary' }}>
+            <Stack direction="row" spacing={3} sx={{ color: 'text.secondary', mt: 1 }}>
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
                 <FileIcon fontSize="small" />
-                <Typography variant="body2">{graph?.nodes?.length || MOCK_INFO.stats.files} Files</Typography>
+                <Typography variant="body2">{graph?.nodes?.length || 0} Files</Typography>
               </Box>
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
                 <CodeIcon fontSize="small" />
-                <Typography variant="body2">{(MOCK_INFO.stats.linesOfCode / 1000).toFixed(1)}k LOC</Typography>
+                <Typography variant="body2">{(totalLoc / 1000).toFixed(1)}k LOC</Typography>
               </Box>
             </Stack>
           </Box>
@@ -435,30 +494,99 @@ const Results: React.FC = () => {
                         
                         <Collapse in={activeSection === 'insights'}>
                             <Box sx={{ px: 2, pb: 2 }}>
-                                <Typography variant="body2" paragraph sx={{ whiteSpace: 'normal', color: 'rgba(255,255,255,0.7)' }}>
+                                <Typography variant="body2" paragraph sx={{ whiteSpace: 'normal', color: 'rgba(255,255,255,0.7)', mb: 2 }}>
                                     {graph?.nodes ? `${graph.nodes.length} files analyzed across ${graph.categories.length} categories.` : "Analyzing repository structure..."}
+                                </Typography>
+
+                                {/* Language Breakdown */}
+                                {languageStats.length > 0 && (
+                                    <Box sx={{ mb: 3 }}>
+                                        <Typography variant="overline" sx={{ color: 'text.secondary', fontWeight: 600, display: 'block', mb: 1 }}>
+                                            LANGUAGE COMPOSITION
+                                        </Typography>
+                                        <Stack spacing={1.5}>
+                                            {languageStats.slice(0, 5).map((stat, idx) => (
+                                                <Box key={stat.language}>
+                                                    <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5, alignItems: 'center' }}>
+                                                        <Typography variant="body2" sx={{ fontSize: '0.85rem' }}>
+                                                            {stat.language}
+                                                        </Typography>
+                                                        <Typography variant="caption" sx={{ color: 'text.secondary' }}>
+                                                            {stat.percentage.toFixed(1)}%
+                                                        </Typography>
+                                                    </Box>
+                                                    <Box 
+                                                        sx={{ 
+                                                            width: '100%', 
+                                                            height: 4, 
+                                                            bgcolor: 'rgba(255,255,255,0.08)', 
+                                                            borderRadius: 2,
+                                                            overflow: 'hidden'
+                                                        }}
+                                                    >
+                                                        <Box 
+                                                            sx={{ 
+                                                                width: `${stat.percentage}%`, 
+                                                                height: '100%', 
+                                                                bgcolor: CATEGORY_COLORS[idx % CATEGORY_COLORS.length], 
+                                                                borderRadius: 2 
+                                                            }} 
+                                                        />
+                                                    </Box>
+                                                </Box>
+                                            ))}
+                                        </Stack>
+                                    </Box>
+                                )}
+                                
+                                <Typography variant="overline" sx={{ color: 'text.secondary', fontWeight: 600, display: 'block', mb: 1 }}>
+                                    TOP CATEGORIES
                                 </Typography>
                                 
 
                                 <Typography variant="caption" fontWeight="bold" sx={{ mt: 1, display: 'block', color: 'rgba(255,255,255,0.5)' }}>
                                     TOP CATEGORIES
                                 </Typography>
-                                <Box sx={{ display: 'flex', gap: 1, mt: 1, flexWrap: 'wrap' }}>
-                                    {graph?.categories.slice(0, 5).map((cat: string, i: number) => (
-                                        <Chip 
-                                            key={cat} 
-                                            label={cat} 
-                                            size="small" 
-                                            variant="outlined" 
-                                            sx={{ 
-                                                fontWeight: 'bold', 
-                                                borderColor: alpha(CATEGORY_COLORS[i % CATEGORY_COLORS.length], 0.4), 
-                                                color: CATEGORY_COLORS[i % CATEGORY_COLORS.length], 
-                                                bgcolor: alpha(CATEGORY_COLORS[i % CATEGORY_COLORS.length], 0.1) 
-                                            }} 
-                                        />
-                                    ))}
-                                </Box>
+                                <List dense sx={{ mt: 1, p: 0 }}>
+                                    {categoryStats.slice(0, 5).map((stat: any, i: number) => {
+                                        const colorIndex = graph?.categories.indexOf(stat.name) ?? i;
+                                        const color = CATEGORY_COLORS[colorIndex % CATEGORY_COLORS.length];
+                                        return (
+                                            <ListItem key={stat.name} sx={{ 
+                                                py: 0.5, 
+                                                px: 1,
+                                                mb: 0.5,
+                                                borderRadius: 1, 
+                                                bgcolor: alpha(color, 0.1),
+                                                border: `1px solid ${alpha(color, 0.2)}`
+                                            }}>
+                                                <ListItemText 
+                                                    primary={
+                                                        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                                            <Typography variant="body2" sx={{ fontWeight: 600, color: color }}>
+                                                                {stat.name}
+                                                            </Typography>
+                                                            <Typography variant="caption" sx={{ color: 'rgba(255,255,255,0.7)', fontWeight: 500 }}>
+                                                                {stat.files} files
+                                                            </Typography>
+                                                        </Box>
+                                                    }
+                                                    secondary={
+                                                        <Box sx={{ display: 'flex', justifyContent: 'space-between', width: '100%' }}>
+                                                            <Typography variant="caption" sx={{ color: 'rgba(255,255,255,0.4)', fontSize: '0.7rem' }}>
+                                                                Total lines
+                                                            </Typography>
+                                                            <Typography variant="caption" sx={{ color: 'rgba(255,255,255,0.4)', fontSize: '0.7rem' }}>
+                                                                {(stat.lines).toLocaleString()}
+                                                            </Typography>
+                                                        </Box>
+                                                    }
+                                                    secondaryTypographyProps={{ component: 'div' }}
+                                                />
+                                            </ListItem>
+                                        );
+                                    })}
+                                </List>
                             </Box>
                         </Collapse>
                     </Box>
