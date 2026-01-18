@@ -13,14 +13,16 @@ import {
 } from 'redux-persist';
 
 import { uiSlice } from "./slices/ui";
+import { graphSlice } from "./slices/graph";
 
 const combinedReducer = combineReducers({
-    [uiSlice.name]: uiSlice.reducer
+    [uiSlice.name]: uiSlice.reducer,
+    [graphSlice.name]: graphSlice.reducer
 });
 
 const persistConfig = {
   key: 'git-lumina-root',
-  whitelist: [],
+  whitelist: ['graph'],
   storage
 }
 const persistedReducer = persistReducer(persistConfig, combinedReducer);
