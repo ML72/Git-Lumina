@@ -567,8 +567,8 @@ const Webcam: React.FC<WebcamProps> = ({
                             }
                         }
                     },
-                    width: 640,  // Higher resolution for better palm detection
-                    height: 480
+                    width: 1280,  // Higher resolution for better palm detection
+                    height: 720
                 });
                 
                 cameraRef.current = camera;
