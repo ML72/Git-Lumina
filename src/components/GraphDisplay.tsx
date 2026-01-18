@@ -3,10 +3,16 @@ import { Box, Typography, useTheme } from '@mui/material';
 import { useSelector } from 'react-redux';
 import { GraphCanvas, GraphNode, GraphEdge, darkTheme, lightTheme, GraphCanvasRef } from 'reagraph';
 import { selectGraph } from '../store/slices/graph';
+import { CodebaseGraph } from '../types/CodebaseGraph';
 
-const GraphDisplay: React.FC = () => {
+interface GraphDisplayProps {
+    graph?: CodebaseGraph | null;
+}
+
+const GraphDisplay: React.FC<GraphDisplayProps> = ({ graph }) => {
     const theme = useTheme();
-    const graphData = useSelector(selectGraph);
+    const reduxGraph = useSelector(selectGraph);
+    const graphData = graph || reduxGraph;
     const graphRef = useRef<GraphCanvasRef | null>(null);
 
     // Color palette for category mapping

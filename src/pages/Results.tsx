@@ -34,6 +34,7 @@ import {
   ExpandMore,
   Lightbulb as LightbulbIcon
 } from '@mui/icons-material';
+import { useLocation } from 'react-router-dom';
 import CustomPage from '../components/CustomPage';
 import GraphDisplay from '../components/GraphDisplay';
 
@@ -50,8 +51,12 @@ const SUGGESTED_QUESTIONS = [
 
 const Results: React.FC = () => {
   const theme = useTheme();
+  const location = useLocation();
   const [query, setQuery] = useState('');
   const [chat, setChat] = useState(MOCK_CHAT);
+  
+  // Try to retrieve large graph from navigation state if available
+  const largeGraph = location.state?.largeGraph;
   
   const messagesEndRef = useRef<null | HTMLDivElement>(null);
 
@@ -587,7 +592,7 @@ const Results: React.FC = () => {
                 </Paper>
             </Box>
 
-           <GraphDisplay />
+           <GraphDisplay graph={largeGraph} />
         </Box>
 
       </Box>

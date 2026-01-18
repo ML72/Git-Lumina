@@ -27,10 +27,11 @@ const Alert: React.FC<ComponentProps> = (props: ComponentProps) => {
             }
           : { 
               position: 'fixed', 
-              bottom: 24, 
-              right: 24,
+              bottom: 32, 
+              right: 32,
               zIndex: 2000,
-              maxWidth: 400
+              maxWidth: 400,
+              alignItems: 'flex-end'
             }
         }
       >
@@ -40,7 +41,8 @@ const Alert: React.FC<ComponentProps> = (props: ComponentProps) => {
                 key={alert.id || index}
                 severity={alert.alertType} 
                 sx={{ 
-                  width: '100%',
+                  width: 'auto',
+                  minWidth: '300px',
                   boxShadow: 3
                  }}
                  elevation={6}
