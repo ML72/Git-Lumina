@@ -46,6 +46,8 @@ const Landing: React.FC = () => {
   const [apiKey, setApiKeyInput] = useState('');
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [fileName, setFileName] = useState<string | null>(null);
+  const [repoUrl, setRepoUrl] = useState('');
+  const [zipFile, setZipFile] = useState<File | null>(null);
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
   const dispatch = useDispatch();
