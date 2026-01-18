@@ -50,7 +50,7 @@ import CustomPage from '../components/CustomPage';
 import GraphDisplay, { GraphDisplayRef } from '../components/GraphDisplay';
 import Webcam, { GestureState } from '../components/Webcam';
 import useGestureControls, { GestureControlState } from '../hooks/useGestureControls';
-import { selectGraph } from '../store/slices/graph';
+import { selectGraph, selectName } from '../store/slices/graph';
 import { getLanguageFromExtension } from '../utils/languageSyntax';
 
 const CATEGORY_COLORS = [
@@ -67,6 +67,7 @@ const Results: React.FC = () => {
   const theme = useTheme();
   const location = useLocation();
   const graph = useSelector(selectGraph);
+  const repoName = useSelector(selectName);
   const [query, setQuery] = useState('');
   const [webcamEnabled, setWebcamEnabled] = useState(true);
   const [webcamVisible, setWebcamVisible] = useState(true);
@@ -310,7 +311,7 @@ const Results: React.FC = () => {
           {/* Header Section */}
           <Box sx={{ p: 3, borderBottom: `1px solid ${theme.palette.divider}`, display: isSidebarOpen ? 'block' : 'none' }}>
             <Typography variant="h5" fontWeight="bold" gutterBottom noWrap>
-              {graph?.name || 'Repository'}
+              {repoName || 'Repository'}
             </Typography>
             
             <Stack direction="row" spacing={3} sx={{ color: 'text.secondary', mt: 1 }}>
