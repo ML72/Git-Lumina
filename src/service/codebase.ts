@@ -40,12 +40,13 @@ export const generateAndStoreGraph = async (
         } else {
             console.log(`Graph is small (${graph.nodes.length} nodes). Storing in Redux.`);
             dispatch(setGraph(graph));
-            setNewAlert(dispatch, { msg: "Graph construction complete!", alertType: "success" });
+            
+            // Only show "complete" alert if we aren't about to start another process (categorization)
+            if (!apiKey) {
+                 setNewAlert(dispatch, { msg: "Graph construction complete!", alertType: "success" });
+            }
             navigate('/results');
         }
-
-        // Navigate
-        navigate('/results');
 
         // Auto-categorize if API key is present (ASYNC)
         if (apiKey) {
