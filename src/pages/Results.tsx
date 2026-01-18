@@ -87,6 +87,7 @@ const Results: React.FC = () => {
   const repoName = useSelector(selectName);
   const apiKey = useSelector(selectOpenAiKey);
   const [webcamEnabled, setWebcamEnabled] = useState(true);
+  const [permissionDenied, setPermissionDenied] = useState(false);
   const [autoRotateEnabled, setAutoRotateEnabled] = useState(true);
   const [activeHandCount, setActiveHandCount] = useState(0);
   const [gestureMode, setGestureMode] = useState<'idle' | 'left-hand-rotate' | 'right-hand-pan' | 'two-hand-zoom'>('idle');
@@ -452,6 +453,7 @@ const Results: React.FC = () => {
   // Handle webcam error
   const handleWebcamError = useCallback(() => {
     setWebcamEnabled(false);
+    setPermissionDenied(true);
   }, []);
 
   const handleSectionToggle = (section: 'repository' | 'quests' | 'categories') => {
@@ -560,7 +562,9 @@ const Results: React.FC = () => {
 
             {/* Content Container - Hide if collapsed */}
             {isSidebarOpen ? (
-                <Box sx={{ 
+                <Box 
+                    className="sidebar-content"
+                    sx={{ 
                     flex: 1, 
                     display: 'flex', 
                     flexDirection: 'column', 
@@ -568,8 +572,6 @@ const Results: React.FC = () => {
                     minWidth: sidebarWidth, 
                     position: 'relative',
                     zIndex: 1,
-                    '&::-webkit-scrollbar': { display: 'none' },
-                    scrollbarWidth: 'none',
                 }}>
                     
                     {/* 2. Repository Section */}
@@ -880,7 +882,6 @@ const Results: React.FC = () => {
                         </Collapse>
                     </Box>
 
-
                 </Box>
             ) : (
                 // Collapsed State Icons
@@ -911,6 +912,7 @@ const Results: React.FC = () => {
             ref={graphDisplayRef}
             graph={largeGraph}
             isGestureActive={webcamEnabled && activeHandCount > 0}
+            autoRotate={autoRotateEnabled}
           />
           
           {/* Quest Hint Popup as Speech Bubble */}
@@ -1151,6 +1153,7 @@ const Results: React.FC = () => {
                 Motion Control
               </Typography>
               <Switch
+                disabled={permissionDenied}
                 checked={webcamEnabled}
                 onChange={(e) => setWebcamEnabled(e.target.checked)}
                 size="small"
