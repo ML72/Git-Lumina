@@ -1,4 +1,5 @@
 import React, { useState, useCallback, useEffect, useRef } from 'react';
+import { useSelector } from 'react-redux';
 import { 
   Box, 
   Typography, 
@@ -17,6 +18,8 @@ import {
   Button,
   Tooltip,
   Collapse,
+  ListItemIcon,
+  ListItemButton
 } from '@mui/material';
 import { 
   Send as SendIcon, 
@@ -32,11 +35,20 @@ import {
   HelpOutline as HelpIcon,
   ExpandLess,
   ExpandMore,
-  Lightbulb as LightbulbIcon
+  Lightbulb as LightbulbIcon,
+  AccountTree as AccountTreeIcon,
+  Description as FileIcon,
+  Folder as FolderIcon
 } from '@mui/icons-material';
 import { useLocation } from 'react-router-dom';
 import CustomPage from '../components/CustomPage';
 import GraphDisplay from '../components/GraphDisplay';
+import { selectGraph } from '../store/slices/graph';
+
+const CATEGORY_COLORS = [
+    '#FF6B6B', '#4ECDC4', '#45B7D1', '#FFA07A', '#98D8C8',
+    '#F7DC6F', '#BB8FCE', '#F1948A', '#85C1E9', '#82E0AA'
+];
 
 // Mock Data for the Socratic Guide
 const MOCK_CHAT = [
@@ -52,6 +64,7 @@ const SUGGESTED_QUESTIONS = [
 const Results: React.FC = () => {
   const theme = useTheme();
   const location = useLocation();
+  const graph = useSelector(selectGraph);
   const [query, setQuery] = useState('');
   const [chat, setChat] = useState(MOCK_CHAT);
   
@@ -73,7 +86,15 @@ const Results: React.FC = () => {
   const [isResizing, setIsResizing] = useState(false);
   
   // Sections State - Accordion Logic
-  const [activeSection, setActiveSection] = useState<'insights' | 'quests' | 'cortex' | null>('insights');
+  const [activeSection, setActiveSection] = useState<'insights' | 'quests' | 'cortex' | 'categories' | null>('insights');
+  const [expandedCategories, setExpandedCategories] = useState<Record<number, boolean>>({});
+
+  const toggleCategory = (idx: number) => {
+      setExpandedCategories(prev => ({
+          ...prev,
+          [idx]: !prev[idx]
+      }));
+  };
   
   // State for Quests
   const [activeQuestId, setActiveQuestId] = useState<number>(1); 
@@ -306,20 +327,102 @@ const Results: React.FC = () => {
                         <Collapse in={activeSection === 'insights'}>
                             <Box sx={{ px: 2, pb: 2 }}>
                                 <Typography variant="body2" paragraph sx={{ whiteSpace: 'normal', color: 'rgba(255,255,255,0.7)' }}>
-                                    This looks like a standard React project with Vite. The component hierarchy is well-structured with clear separation between container and presentational components.
+                                    {graph?.nodes ? `${graph.nodes.length} files analyzed across ${graph.categories.length} categories.` : "Analyzing repository structure..."}
                                 </Typography>
                                 
                                 <Typography variant="caption" fontWeight="bold" sx={{ mt: 1, display: 'block', color: 'rgba(255,255,255,0.5)' }}>
-                                    DETECTED LAYERS
+                                    TOP CATEGORIES
                                 </Typography>
                                 <Box sx={{ display: 'flex', gap: 1, mt: 1, flexWrap: 'wrap' }}>
-                                    <Chip label="Presentation" size="small" variant="outlined" sx={{ fontWeight: 'bold', borderColor: 'rgba(121, 192, 255, 0.4)', color: '#79c0ff', bgcolor: 'rgba(121, 192, 255, 0.1)' }} />
-                                    <Chip label="Business Logic" size="small" variant="outlined" sx={{ color: 'rgba(255,255,255,0.7)', borderColor: 'rgba(255,255,255,0.2)' }} />
-                                    <Chip label="Data Access" size="small" variant="outlined" sx={{ color: 'rgba(255,255,255,0.7)', borderColor: 'rgba(255,255,255,0.2)' }} />
+                                    {graph?.categories.slice(0, 5).map((cat, i) => (
+                                        <Chip 
+                                            key={cat} 
+                                            label={cat} 
+                                            size="small" 
+                                            variant="outlined" 
+                                            sx={{ 
+                                                fontWeight: 'bold', 
+                                                borderColor: alpha(CATEGORY_COLORS[i % CATEGORY_COLORS.length], 0.4), 
+                                                color: CATEGORY_COLORS[i % CATEGORY_COLORS.length], 
+                                                bgcolor: alpha(CATEGORY_COLORS[i % CATEGORY_COLORS.length], 0.1) 
+                                            }} 
+                                        />
+                                    ))}
                                 </Box>
                             </Box>
                         </Collapse>
                     </Box>
+
+                    {/* NEW: Categories Section */}
+                    {graph && (
+                    <Box sx={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
+                        <Box 
+                            sx={{ p: 2, display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer', '&:hover': { bgcolor: 'rgba(255,255,255,0.03)' } }}
+                            onClick={() => handleSectionToggle('categories')}
+                        >
+                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                                <AccountTreeIcon fontSize="small" sx={{ color: activeSection === 'categories' ? '#79c0ff' : 'rgba(255,255,255,0.5)' }} />
+                                <Typography variant="subtitle2" fontWeight="bold" sx={{ color: activeSection === 'categories' ? '#79c0ff' : 'rgba(255,255,255,0.7)', letterSpacing: '0.5px' }}>
+                                    CODE ORGANIZATION
+                                </Typography>
+                            </Box>
+                            {activeSection === 'categories' ? <ExpandLess fontSize="small" sx={{ color: 'rgba(255,255,255,0.5)' }} /> : <ExpandMore fontSize="small" sx={{ color: 'rgba(255,255,255,0.5)' }} />}
+                        </Box>
+                        
+                        <Collapse in={activeSection === 'categories'}>
+                            <List disablePadding sx={{ pb: 1 }}>
+                                {graph.categories.map((category, idx) => {
+                                    const color = CATEGORY_COLORS[idx % CATEGORY_COLORS.length];
+                                    const fileCount = graph.nodes.filter(n => n.category === idx).length;
+                                    const isOpen = expandedCategories[idx];
+                                    
+                                    // Optimization: filter files only if open
+                                    const files = isOpen ? graph.nodes.filter(n => n.category === idx) : [];
+
+                                    return (
+                                        <React.Fragment key={category}>
+                                            <ListItemButton 
+                                                onClick={() => toggleCategory(idx)}
+                                                sx={{ py: 1, px: 2, '&:hover': { bgcolor: 'rgba(255,255,255,0.05)' } }}
+                                            >
+                                                <ListItemIcon sx={{ minWidth: 32 }}>
+                                                    <FolderIcon sx={{ color: color, fontSize: 20 }} />
+                                                </ListItemIcon>
+                                                <ListItemText 
+                                                    primary={category} 
+                                                    primaryTypographyProps={{ variant: 'body2', color: 'rgba(255,255,255,0.9)' }}
+                                                    secondary={`${fileCount} files`}
+                                                    secondaryTypographyProps={{ variant: 'caption', color: 'rgba(255,255,255,0.5)' }}
+                                                />
+                                                {isOpen ? <ExpandLess fontSize="small" sx={{ color: 'rgba(255,255,255,0.3)' }} /> : <ExpandMore fontSize="small" sx={{ color: 'rgba(255,255,255,0.3)' }} />}
+                                            </ListItemButton>
+                                            
+                                            <Collapse in={isOpen} timeout="auto" unmountOnExit>
+                                                <List disablePadding sx={{ bgcolor: 'rgba(0,0,0,0.1)', mb: 1 }}>
+                                                    {files.map((node) => (
+                                                        <ListItemButton key={node.filepath} sx={{ pl: 4, py: 0.5, minHeight: 0 }}>
+                                                            <ListItemIcon sx={{ minWidth: 24 }}>
+                                                                <FileIcon sx={{ fontSize: 16, color: 'rgba(255,255,255,0.3)' }} />
+                                                            </ListItemIcon>
+                                                            <ListItemText 
+                                                                primary={node.filepath} 
+                                                                primaryTypographyProps={{ 
+                                                                    variant: 'caption', 
+                                                                    color: 'rgba(255,255,255,0.7)', 
+                                                                    sx: { wordBreak: 'break-all' } 
+                                                                }} 
+                                                            />
+                                                        </ListItemButton>
+                                                    ))}
+                                                </List>
+                                            </Collapse>
+                                        </React.Fragment>
+                                    );
+                                })}
+                            </List>
+                        </Collapse>
+                    </Box>
+                    )}
 
                     {/* 3. Quest / Onboarding Section */}
                     <Box sx={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}>

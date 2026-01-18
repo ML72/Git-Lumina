@@ -1,5 +1,5 @@
 import { Dispatch } from 'redux';
-import { setGraph, setName, resetGraphState } from '../store/slices/graph';
+import { setGraph, setName, resetGraphState, updateGraphCategories } from '../store/slices/graph';
 import { constructGraphFromZip } from '../utils/graphConstruction';
 import { openaiCategorize } from '../utils/openaiCategorize';
 import { setNewAlert } from './alert';
@@ -24,35 +24,9 @@ export const generateAndStoreGraph = async (
              throw new Error("Could not extract any valid code files from the zip.");
         }
 
-        // Auto-categorize if API key is present
-        if (apiKey) {
-            console.log("Categorizing files with OpenAI...");
-            setNewAlert(dispatch, { msg: "Graph built. Now categorizing files with AI...", alertType: "info" });
-            try {
-                const filePaths = graph.nodes.map(n => n.filepath);
-                const categorization = await openaiCategorize(filePaths, apiKey);
-                
-                if (categorization && categorization.categories.length > 0) {
-                    graph.categories = categorization.categories;
-                    
-                    graph.nodes.forEach(node => {
-                        const catName = categorization.assignments[node.filepath];
-                        if (catName) {
-                            const idx = categorization.categories.indexOf(catName);
-                            if (idx !== -1) {
-                                node.category = idx;
-                            }
-                        }
-                    });
-                     console.log("Categorization complete:", categorization.categories);
-                }
-            } catch (catError) {
-                console.warn("Categorization failed, falling back to default.", catError);
-                setNewAlert(dispatch, { msg: "AI Categorization failed, using default grouping.", alertType: "warning" });
-            }
-        }
-
-        console.log("Graph constructed.");
+        console.log("Graph constructed, dispatching to store...");
+        dispatch(setGraph(graph));
+        dispatch(setName(file.name));
         
         // Dispatch basic metadata to store regardless
         dispatch(setName(file.name));
@@ -71,6 +45,34 @@ export const generateAndStoreGraph = async (
             navigate('/results');
         }
 
+        // Navigate
+        navigate('/results');
+
+        // Auto-categorize if API key is present (ASYNC)
+        if (apiKey) {
+            console.log("Categorizing files with OpenAI...");
+            setNewAlert(dispatch, { msg: "Graph built. Categorizing in background...", alertType: "info" });
+            
+            // Do not await this. Let it run in background.
+            openaiCategorize(graph.nodes, apiKey)
+                .then(categorization => {
+                    if (categorization && categorization.categories.length > 0) {
+                        dispatch(updateGraphCategories({
+                            categories: categorization.categories,
+                            assignments: categorization.assignments
+                        }));
+                        console.log("Categorization complete:", categorization.categories);
+                        setNewAlert(dispatch, { msg: "AI Categorization applied!", alertType: "success" });
+                    }
+                })
+                .catch(catError => {
+                    console.warn("Categorization failed, falling back to default.", catError);
+                    setNewAlert(dispatch, { 
+                        msg: `AI Categorization failed: ${catError instanceof Error ? catError.message : "Unknown error"}`, 
+                        alertType: "warning" 
+                    });
+                });
+        }
      } catch (error: any) {
         console.error("Error generating graph:", error);
          setNewAlert(dispatch, {
