@@ -53,8 +53,24 @@ import { generateQuests } from '../utils/openaiQuests';
 import { getLanguageFromExtension } from '../utils/languageSyntax';
 
 const CATEGORY_COLORS = [
-    '#FF6B6B', '#4ECDC4', '#45B7D1', '#FFA07A', '#98D8C8',
-    '#F7DC6F', '#BB8FCE', '#F1948A', '#85C1E9', '#82E0AA'
+    '#FF6B6B', // Red
+    '#4ECDC4', // Teal
+    '#45B7D1', // Blue
+    '#FFA07A', // Orange
+    '#98D8C8', // Mint
+    '#F06292', // Pink
+    '#AED581', // Light Green
+    '#FFD54F', // Yellow
+    '#64B5F6', // Blue 
+    '#BA68C8', // Purple
+    '#F0F4C3', // Lime
+    '#7986CB', // Indigo
+    '#E57373', // Light Red
+    '#4DB6AC', // Light Teal
+    '#4FC3F7', // Light Blue
+    '#FFB74D', // Light Orange
+    '#A5D6A7', // Light Mint
+    '#F48FB1'  // Light Pink
 ];
 
 const LANGUAGE_DISPLAY_NAMES: Record<string, string> = {
@@ -160,7 +176,8 @@ const Results: React.FC = () => {
     const stats = displayGraph.categories.map((cat: any) => ({
         name: cat,
         files: 0,
-        lines: 0
+        lines: 0,
+        connections: 0
     }));
 
     // Aggregate from nodes
@@ -172,8 +189,30 @@ const Results: React.FC = () => {
         }
     });
 
-    // Sort by file count descending
-    return stats.sort((a: any, b: any) => b.files - a.files);
+    // Aggregate connections (weights)
+    if (displayGraph.edges) {
+        displayGraph.edges.forEach((edge: any) => {
+            const sourceNode = displayGraph.nodes[edge[0]];
+            const targetNode = displayGraph.nodes[edge[1]];
+            const weight = edge[2] || 1;
+
+            // Add connectivity score to both source and target categories
+            if (sourceNode && stats[sourceNode.category]) {
+                stats[sourceNode.category].connections += weight;
+            }
+            if (targetNode && stats[targetNode.category] && targetNode.category !== sourceNode.category) {
+                stats[targetNode.category].connections += weight;
+            }
+        });
+    }
+
+    // Sort by Importance (Files + Connectivity)
+    return stats.sort((a: any, b: any) => {
+        // Weighted score: Files are heavily weighted, ties broken by connectivity
+        const scoreA = (a.files * 100) + a.connections;
+        const scoreB = (b.files * 100) + b.connections;
+        return scoreB - scoreA;
+    });
   }, [displayGraph]);
 
   const totalLoc = React.useMemo(() => {
@@ -648,7 +687,7 @@ const Results: React.FC = () => {
                                 </Typography>
                                 
                                 <List disablePadding sx={{ pb: 1 }}>
-                                    {categoryStats.slice(0, 5).map((stat: any, i: number) => {
+                                    {categoryStats.map((stat: any, i: number) => {
                                         const idx = displayGraph?.categories.indexOf(stat.name) ?? -1;
                                         if (idx === -1) return null;
 
