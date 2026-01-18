@@ -43,7 +43,8 @@ import {
   School as SchoolIcon,
   CheckCircle as CheckCircleIcon,
   RadioButtonUnchecked as UncheckedIcon,
-  Lightbulb as LightbulbIcon
+  Lightbulb as LightbulbIcon,
+  Close as CloseIcon
 } from '@mui/icons-material';
 import { useLocation } from 'react-router-dom';
 import CustomPage from '../components/CustomPage';
@@ -51,6 +52,9 @@ import GraphDisplay, { GraphDisplayRef } from '../components/GraphDisplay';
 import Webcam, { GestureState } from '../components/Webcam';
 import useGestureControls, { GestureControlState } from '../hooks/useGestureControls';
 import { selectGraph, selectName } from '../store/slices/graph';
+import { selectOpenAiKey } from '../store/slices/api';
+import { CodebaseGraph } from '../types/CodebaseGraph';
+import { generateQuests } from '../utils/openaiQuests';
 import { getLanguageFromExtension } from '../utils/languageSyntax';
 
 const CATEGORY_COLORS = [
@@ -88,6 +92,7 @@ const Results: React.FC = () => {
   const location = useLocation();
   const graph = useSelector(selectGraph);
   const repoName = useSelector(selectName);
+  const apiKey = useSelector(selectOpenAiKey);
   const [query, setQuery] = useState('');
   const [webcamEnabled, setWebcamEnabled] = useState(true);
   const [webcamVisible, setWebcamVisible] = useState(true);
@@ -97,6 +102,21 @@ const Results: React.FC = () => {
   });
   const [gestureMode, setGestureMode] = useState<'idle' | 'left-hand-rotate' | 'right-hand-pan' | 'two-hand-zoom'>('idle');
   const [activeHandCount, setActiveHandCount] = useState(0);
+  
+  // Track pinch states for click/escape handling
+  const [leftPinching, setLeftPinching] = useState(false);
+  const [rightPinching, setRightPinching] = useState(false);
+  const prevLeftPinchRef = useRef(false);
+  const prevRightPinchRef = useRef(false);
+  
+  // Track hand positions for cursor display (scaled by wingspan)
+  const [handPositions, setHandPositions] = useState<{
+    left: { x: number; y: number } | null;
+    right: { x: number; y: number } | null;
+  }>({ left: null, right: null });
+  
+  // Track sensitivity scale for cursor positioning
+  const [sensitivityScale, setSensitivityScale] = useState(1);
   
   const graphDisplayRef = useRef<GraphDisplayRef>(null);
   const { processGesture } = useGestureControls();
@@ -133,8 +153,8 @@ const Results: React.FC = () => {
       }));
   };
   
-  // Auto-reset timeout duration (5 seconds)
-  const AUTO_RESET_DELAY = 5000;
+  // Auto-reset timeout duration (2 seconds)
+  const AUTO_RESET_DELAY = 2000;
   
   // Section toggle state
   const [activeSection, setActiveSection] = useState<string>('repository');
@@ -196,17 +216,75 @@ const Results: React.FC = () => {
   }, [graph]);
 
   // Quest data and state
-  const [quests, setQuests] = useState([
-    { id: 1, title: 'Understand Entry Point', description: 'Find where the app starts', completed: false },
-    { id: 2, title: 'Explore Components', description: 'Review the component structure', completed: false },
-    { id: 3, title: 'Check State Management', description: 'Understand how data flows', completed: false },
+  interface QuestState {
+      id: number;
+      title: string;
+      description: string;
+      completed: boolean;
+      relevantNodes: string[];
+      hint: string;
+  }
+
+  const [quests, setQuests] = useState<QuestState[]>([
+    { id: 1, title: 'The Origin', description: 'Where it all begins', completed: false, relevantNodes: [], hint: 'Check the root files.' },
+    { id: 2, title: 'The Protagonist', description: 'The main logic', completed: false, relevantNodes: [], hint: 'Look for App.tsx.' },
+    { id: 3, title: 'The World', description: 'The context', completed: false, relevantNodes: [], hint: 'Review helper functions.' },
   ]);
   const [activeQuestId, setActiveQuestId] = useState<number | null>(1);
+  const [activeHint, setActiveHint] = useState<string | null>(null);
+
+  // Update quests based on repository analysis
+  useEffect(() => {
+    const activeGraph = (graph || largeGraph) as CodebaseGraph;
+    if (!activeGraph?.nodes?.length || !apiKey) return;
+
+    // Avoid regenerating if we already have quests and the graph hasn't changed (simplified check)
+    // For now, we'll just merge state to preserve completion status
+    generateQuests(activeGraph.nodes, apiKey)
+      .then(newQuests => {
+        if (newQuests && newQuests.length > 0) {
+          setQuests(prev => {
+            // Merge new quests with existing state to preserve 'completed' status
+            return newQuests.map(q => {
+              const existing = prev.find(p => p.id === q.id);
+              return {
+                id: q.id,
+                title: q.title,
+                description: q.description,
+                completed: existing ? existing.completed : q.completed,
+                relevantNodes: q.relevantNodes,
+                hint: q.hint
+              };
+            });
+          });
+        }
+      })
+      .catch(console.error);
+  }, [graph, largeGraph, apiKey]);
   
   const toggleQuestCompletion = (questId: number) => {
     setQuests(prev => prev.map(q => 
       q.id === questId ? { ...q, completed: !q.completed } : q
     ));
+  };
+
+  const handleQuestClick = (quest: QuestState) => {
+      setActiveQuestId(quest.id);
+      
+      // Mark as completed if not already
+      if (!quest.completed) {
+          toggleQuestCompletion(quest.id);
+      }
+      
+      // Fly to nodes
+      if (quest.relevantNodes && quest.relevantNodes.length > 0 && graphDisplayRef.current) {
+          graphDisplayRef.current.focusNodes(quest.relevantNodes);
+      }
+      
+      // Show hint
+      if (quest.hint) {
+          setActiveHint(quest.hint);
+      }
   };
   
   // Suggested questions for Cortex
@@ -227,23 +305,124 @@ const Results: React.FC = () => {
     setGestureMode(controlState.mode);
     setActiveHandCount(controlState.activeHandCount);
     
+    // Update sensitivity scale for cursor positioning
+    setSensitivityScale(gestureState.sensitivityScale);
+    
+    // Update hand positions for cursor display, scaled by wingspan
+    // Scale positions relative to body center (midpoint between shoulders) using sensitivity scale
+    // This normalizes cursor position so same physical hand position = same screen position regardless of distance
+    const CURSOR_SENSITIVITY_MULTIPLIER = 1.5;
+    const bodyCenter = gestureState.bodyCenter;
+    const scalePosition = (pos: { x: number; y: number }) => {
+      // Calculate offset from body center and scale by sensitivityScale with additional sensitivity multiplier
+      const offsetX = pos.x - bodyCenter.x;
+      const offsetY = pos.y - bodyCenter.y;
+      return {
+        // Map to screen center (0.5) plus scaled offset from body center
+        x: 0.5 + offsetX * gestureState.sensitivityScale * CURSOR_SENSITIVITY_MULTIPLIER,
+        y: 0.5 + offsetY * gestureState.sensitivityScale * CURSOR_SENSITIVITY_MULTIPLIER
+      };
+    };
+    
+    setHandPositions({
+      left: gestureState.leftHand ? scalePosition(gestureState.leftHand.position) : null,
+      right: gestureState.rightHand ? scalePosition(gestureState.rightHand.position) : null
+    });
+    
+    // Handle pinch gesture state changes for click/escape
+    const currentLeftPinch = gestureState.leftHand?.isPinching ?? false;
+    const currentRightPinch = gestureState.rightHand?.isPinching ?? false;
+    
+    // Helper to get screen coordinates for click events (scaled and mirrored to match cursor display)
+    const getScreenCoords = (rawPos: { x: number; y: number }) => {
+      const scaled = scalePosition(rawPos);
+      // Mirror X axis to match cursor display, and convert to screen pixels
+      return {
+        x: (1 - scaled.x) * window.innerWidth,
+        y: scaled.y * window.innerHeight
+      };
+    };
+    
+    // Left hand pinch state change
+    if (currentLeftPinch !== prevLeftPinchRef.current) {
+      if (currentLeftPinch) {
+        // Pinch started - simulate click at cursor position
+        console.log('[Results] Left hand pinch started - clicking');
+        // Dispatch a click event at the scaled cursor position
+        const coords = getScreenCoords(gestureState.leftHand!.position);
+        const clickEvent = new MouseEvent('click', {
+          bubbles: true,
+          cancelable: true,
+          clientX: coords.x,
+          clientY: coords.y
+        });
+        document.elementFromPoint(coords.x, coords.y)?.dispatchEvent(clickEvent);
+      } else {
+        // Pinch ended - simulate escape
+        console.log('[Results] Left hand pinch ended - pressing escape');
+        const escapeEvent = new KeyboardEvent('keydown', {
+          key: 'Escape',
+          code: 'Escape',
+          bubbles: true,
+          cancelable: true
+        });
+        document.dispatchEvent(escapeEvent);
+      }
+      prevLeftPinchRef.current = currentLeftPinch;
+      setLeftPinching(currentLeftPinch);
+    }
+    
+    // Right hand pinch state change
+    if (currentRightPinch !== prevRightPinchRef.current) {
+      if (currentRightPinch) {
+        // Pinch started - simulate click at cursor position
+        console.log('[Results] Right hand pinch started - clicking');
+        const coords = getScreenCoords(gestureState.rightHand!.position);
+        const clickEvent = new MouseEvent('click', {
+          bubbles: true,
+          cancelable: true,
+          clientX: coords.x,
+          clientY: coords.y
+        });
+        document.elementFromPoint(coords.x, coords.y)?.dispatchEvent(clickEvent);
+      } else {
+        // Pinch ended - simulate escape
+        console.log('[Results] Right hand pinch ended - pressing escape');
+        const escapeEvent = new KeyboardEvent('keydown', {
+          key: 'Escape',
+          code: 'Escape',
+          bubbles: true,
+          cancelable: true
+        });
+        document.dispatchEvent(escapeEvent);
+      }
+      prevRightPinchRef.current = currentRightPinch;
+      setRightPinching(currentRightPinch);
+    }
+    
     // Check if any hands are currently detected (regardless of open/closed state)
     const handsDetected = gestureState.leftHand !== null || gestureState.rightHand !== null;
     
     if (handsDetected) {
-      // Hands detected - clear any pending reset timer
+      // Hands detected - clear any pending reset timer and set camera to orbit mode
       if (noHandsTimerRef.current) {
         clearTimeout(noHandsTimerRef.current);
         noHandsTimerRef.current = null;
       }
       hadHandsRef.current = true;
+      // Set camera mode to rotate when hands are detected (stops orbiting)
+      if (graphDisplayRef.current) {
+        graphDisplayRef.current.setCameraMode('rotate');
+      }
     } else if (hadHandsRef.current && !noHandsTimerRef.current) {
       // No hands detected and we previously had hands - start reset timer
-      console.log('[Results] No hands detected - starting 5 second reset timer');
+      console.log('[Results] No hands detected - starting 2 second reset timer');
       noHandsTimerRef.current = setTimeout(() => {
-        console.log('[Results] 5 seconds without hands - resetting view');
+        console.log('[Results] 2 seconds without hands - resetting view');
         if (graphDisplayRef.current) {
           graphDisplayRef.current.resetView();
+          // Set camera mode to orbit when returning to standard view
+          graphDisplayRef.current.setCameraMode('orbit');
         }
         noHandsTimerRef.current = null;
         hadHandsRef.current = false;
@@ -262,23 +441,27 @@ const Results: React.FC = () => {
   }, []);
 
   const handleSuggestedQuestion = (text: string) => {
-      setChat(prev => [...prev, { id: Date.now(), sender: 'user', text }]);
-      // Simulate response for better UX
-      setTimeout(() => {
-          setChat(prev => [...prev, { id: Date.now() + 1, sender: 'system', text: `Analyzing ${text.toLowerCase()}... (Simulation)` }]);
-      }, 800);
-      setQuery('');
+    setChat(prev => [...prev, { id: Date.now(), sender: 'user', text }]);
+    // Simulate response for better UX
+    setTimeout(() => {
+        setChat(prev => [...prev, { id: Date.now() + 1, sender: 'system', text: `Analyzing ${text.toLowerCase()}... (Simulation)` }]);
+    }, 800);
+    setQuery('');
   };
 
   const handleSectionToggle = (section: 'repository' | 'quests' | 'cortex') => {
-      if (activeSection === section) {
-        setActiveSection('');
-      } else {
-        setActiveSection(section);
-        if (!isSidebarOpen) {
-            setIsSidebarOpen(true);
-        }
+    if (activeSection !== section && graphDisplayRef.current) {
+      graphDisplayRef.current.resetView();
+    }
+
+    if (activeSection === section) {
+      setActiveSection('');
+    } else {
+      setActiveSection(section);
+      if (!isSidebarOpen) {
+          setIsSidebarOpen(true);
       }
+    }
   };
 
   // Resize Handlers
@@ -286,12 +469,12 @@ const Results: React.FC = () => {
   const stopResizing = useCallback(() => setIsResizing(false), []);
   
   const resize = useCallback((mouseMoveEvent: MouseEvent) => {
-      if (isResizing) {
-          const newWidth = mouseMoveEvent.clientX;
-          if (newWidth > 260 && newWidth < 600) {
-              setSidebarWidth(newWidth);
-          }
-      }
+    if (isResizing) {
+        const newWidth = mouseMoveEvent.clientX;
+        if (newWidth > 260 && newWidth < 600) {
+            setSidebarWidth(newWidth);
+        }
+    }
   }, [isResizing]);
 
   useEffect(() => {
@@ -363,6 +546,8 @@ const Results: React.FC = () => {
                     minWidth: sidebarWidth, 
                     position: 'relative',
                     zIndex: 1,
+                    '&::-webkit-scrollbar': { display: 'none' },
+                    scrollbarWidth: 'none',
                 }}>
                     
                     {/* 2. Repository Section */}
@@ -500,7 +685,7 @@ const Results: React.FC = () => {
                             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                                 <SchoolIcon fontSize="small" sx={{ color: activeSection === 'quests' ? '#79c0ff' : 'rgba(255,255,255,0.5)' }} />
                                 <Typography variant="subtitle2" fontWeight="bold" sx={{ color: activeSection === 'quests' ? '#79c0ff' : 'rgba(255,255,255,0.7)', letterSpacing: '0.5px' }}>
-                                    LEARNING QUESTS
+                                    QUESTS
                                 </Typography>
                             </Box>
                             {activeSection === 'quests' ? <ExpandLess fontSize="small" sx={{ color: 'rgba(255,255,255,0.5)' }} /> : <ExpandMore fontSize="small" sx={{ color: 'rgba(255,255,255,0.5)' }} />}
@@ -509,7 +694,7 @@ const Results: React.FC = () => {
                         <Collapse in={activeSection === 'quests'}>
                             <Box sx={{ px: 2, pb: 2 }}>
                                 <Typography variant="caption" paragraph sx={{ whiteSpace: 'normal', display: 'block', color: 'rgba(255,255,255,0.5)' }}>
-                                    Follow the path to understand the architecture.
+                                    Follow these steps to get started with the codebase.
                                 </Typography>
                                 
                                 <List disablePadding>
@@ -535,10 +720,7 @@ const Results: React.FC = () => {
                                                     bgcolor: 'rgba(255,255,255,0.05)' 
                                                 }
                                             }}
-                                            onClick={() => {
-                                                toggleQuestCompletion(quest.id);
-                                                setActiveQuestId(quest.id);
-                                            }}
+                                            onClick={() => handleQuestClick(quest)}
                                         >
                                             <IconButton 
                                                 size="small" 
@@ -697,7 +879,7 @@ const Results: React.FC = () => {
                             <PlayArrowIcon />
                         </IconButton>
                     </Tooltip>
-                    <Tooltip title="Learning Quests" placement="right">
+                    <Tooltip title="Quests" placement="right">
                         <IconButton 
                             onClick={() => handleSectionToggle('quests')}
                             sx={{ color: '#79c0ff', '&:hover': { bgcolor: 'rgba(121, 192, 255, 0.1)' } }}
@@ -723,6 +905,163 @@ const Results: React.FC = () => {
             ref={graphDisplayRef}
             isGestureActive={webcamEnabled && activeHandCount > 0}
           />
+          
+          {/* Quest Hint Popup */}
+          {activeHint && (
+             <Paper sx={{
+                 position: 'absolute',
+                 top: 20,
+                 right: 20,
+                 maxWidth: 300,
+                 p: 2,
+                 bgcolor: 'rgba(13, 17, 23, 0.9)',
+                 backdropFilter: 'blur(10px)',
+                 border: '1px solid #a371f7',
+                 boxShadow: '0 0 20px rgba(163, 113, 247, 0.2)',
+                 zIndex: 110,
+                 animation: 'fadeIn 0.3s ease-in-out',
+                 '@keyframes fadeIn': {
+                    '0%': { opacity: 0, transform: 'translateY(-10px)' },
+                    '100%': { opacity: 1, transform: 'translateY(0)' }
+                 }
+             }}>
+                <Stack direction="row" spacing={1} alignItems="flex-start">
+                    <LightbulbIcon sx={{ color: '#FFD700' }} />
+                    <Box sx={{ flex: 1 }}>
+                        <Typography variant="subtitle2" fontWeight="bold" color="#fff" gutterBottom>
+                            Quest Insight
+                        </Typography>
+                        <Typography variant="body2" color="rgba(255,255,255,0.8)">
+                            {activeHint}
+                        </Typography>
+                    </Box>
+                    <IconButton size="small" onClick={() => setActiveHint(null)} sx={{ color: 'rgba(255,255,255,0.5)', mt: -0.5, mr: -0.5 }}>
+                        <CloseIcon fontSize="small" />
+                    </IconButton>
+                </Stack>
+             </Paper>
+          )}
+
+          {/* Hand Cursor Overlays */}
+          {webcamEnabled && handPositions.left && (
+            <Box
+              sx={{
+                position: 'absolute',
+                left: `${(1 - handPositions.left.x) * 100}%`, // Mirror X for natural feel
+                top: `${handPositions.left.y * 100}%`,
+                transform: 'translate(-50%, -50%)',
+                pointerEvents: 'none',
+                zIndex: 1000,
+                transition: 'left 0.05s ease-out, top 0.05s ease-out',
+              }}
+            >
+              {/* Outer ring */}
+              <Box
+                sx={{
+                  width: leftPinching ? 40 : 50,
+                  height: leftPinching ? 40 : 50,
+                  borderRadius: '50%',
+                  border: `3px solid ${leftPinching ? '#FFD700' : '#FF6B6B'}`,
+                  bgcolor: leftPinching ? 'rgba(255, 215, 0, 0.3)' : 'rgba(255, 107, 107, 0.2)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  boxShadow: leftPinching 
+                    ? '0 0 20px rgba(255, 215, 0, 0.6), inset 0 0 10px rgba(255, 215, 0, 0.3)' 
+                    : '0 0 15px rgba(255, 107, 107, 0.4)',
+                  transition: 'all 0.15s ease-out',
+                }}
+              >
+                {/* Inner dot */}
+                <Box
+                  sx={{
+                    width: leftPinching ? 12 : 8,
+                    height: leftPinching ? 12 : 8,
+                    borderRadius: '50%',
+                    bgcolor: leftPinching ? '#FFD700' : '#FF6B6B',
+                    boxShadow: leftPinching ? '0 0 10px #FFD700' : 'none',
+                    transition: 'all 0.15s ease-out',
+                  }}
+                />
+              </Box>
+              {/* Label */}
+              <Typography
+                sx={{
+                  position: 'absolute',
+                  top: -25,
+                  left: '50%',
+                  transform: 'translateX(-50%)',
+                  fontSize: '12px',
+                  fontWeight: 'bold',
+                  color: leftPinching ? '#FFD700' : '#FF6B6B',
+                  textShadow: '0 0 5px rgba(0,0,0,0.8)',
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                {leftPinching ? 'L CLICK' : 'LEFT'}
+              </Typography>
+            </Box>
+          )}
+          
+          {webcamEnabled && handPositions.right && (
+            <Box
+              sx={{
+                position: 'absolute',
+                left: `${(1 - handPositions.right.x) * 100}%`, // Mirror X for natural feel
+                top: `${handPositions.right.y * 100}%`,
+                transform: 'translate(-50%, -50%)',
+                pointerEvents: 'none',
+                zIndex: 1000,
+                transition: 'left 0.05s ease-out, top 0.05s ease-out',
+              }}
+            >
+              {/* Outer ring */}
+              <Box
+                sx={{
+                  width: rightPinching ? 40 : 50,
+                  height: rightPinching ? 40 : 50,
+                  borderRadius: '50%',
+                  border: `3px solid ${rightPinching ? '#FFD700' : '#4ECDC4'}`,
+                  bgcolor: rightPinching ? 'rgba(255, 215, 0, 0.3)' : 'rgba(78, 205, 196, 0.2)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  boxShadow: rightPinching 
+                    ? '0 0 20px rgba(255, 215, 0, 0.6), inset 0 0 10px rgba(255, 215, 0, 0.3)' 
+                    : '0 0 15px rgba(78, 205, 196, 0.4)',
+                  transition: 'all 0.15s ease-out',
+                }}
+              >
+                {/* Inner dot */}
+                <Box
+                  sx={{
+                    width: rightPinching ? 12 : 8,
+                    height: rightPinching ? 12 : 8,
+                    borderRadius: '50%',
+                    bgcolor: rightPinching ? '#FFD700' : '#4ECDC4',
+                    boxShadow: rightPinching ? '0 0 10px #FFD700' : 'none',
+                    transition: 'all 0.15s ease-out',
+                  }}
+                />
+              </Box>
+              {/* Label */}
+              <Typography
+                sx={{
+                  position: 'absolute',
+                  top: -25,
+                  left: '50%',
+                  transform: 'translateX(-50%)',
+                  fontSize: '12px',
+                  fontWeight: 'bold',
+                  color: rightPinching ? '#FFD700' : '#4ECDC4',
+                  textShadow: '0 0 5px rgba(0,0,0,0.8)',
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                {rightPinching ? 'R CLICK' : 'RIGHT'}
+              </Typography>
+            </Box>
+          )}
           
           {/* Webcam Preview (Picture-in-Picture style) - Always visible in bottom right */}
           <Collapse in={webcamVisible}>

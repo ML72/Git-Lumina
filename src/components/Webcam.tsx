@@ -30,6 +30,7 @@ const RIGHT_WRIST = 16;
 export interface HandData {
     position: { x: number; y: number };
     isOpen: boolean;
+    isPinching: boolean; // Pinch gesture: thumb + index + middle pinched, pinky extended
     handedness: 'Left' | 'Right';
     landmarks: NormalizedLandmarkList;
 }
@@ -39,6 +40,7 @@ export interface GestureState {
     rightHand: HandData | null;
     wingspan: number; // Normalized wingspan (0-1 range based on camera frame)
     sensitivityScale: number; // Inverse of wingspan for sensitivity adjustment
+    bodyCenter: { x: number; y: number }; // Center point between shoulders for cursor reference
 }
 
 interface WebcamProps {
@@ -101,25 +103,44 @@ const isHandOpen = (landmarks: NormalizedLandmarkList): boolean => {
     return thumbExtended && extendedFingers >= 3;
 };
 
-// Calculate the center position of the hand (palm center)
+// Check if hand is making a pinch gesture (thumb + index + middle pinched, pinky extended)
+const isHandPinching = (landmarks: NormalizedLandmarkList): boolean => {
+    const wrist = landmarks[WRIST];
+    const thumbTip = landmarks[THUMB_TIP];
+    const indexTip = landmarks[INDEX_TIP];
+    const middleTip = landmarks[MIDDLE_TIP];
+    const pinkyTip = landmarks[PINKY_TIP];
+    const pinkyMcp = landmarks[PINKY_MCP];
+    
+    // Calculate distance between thumb, index, and middle fingertips
+    // They should be close together for a pinch
+    const thumbToIndex = Math.hypot(thumbTip.x - indexTip.x, thumbTip.y - indexTip.y);
+    const thumbToMiddle = Math.hypot(thumbTip.x - middleTip.x, thumbTip.y - middleTip.y);
+    const indexToMiddle = Math.hypot(indexTip.x - middleTip.x, indexTip.y - middleTip.y);
+    
+    // Threshold for "pinched together" - fingers should be very close
+    const pinchThreshold = 0.08; // Normalized distance threshold
+    
+    // Check if thumb, index, and middle are pinched together
+    const fingersPinched = thumbToIndex < pinchThreshold && 
+                           thumbToMiddle < pinchThreshold && 
+                           indexToMiddle < pinchThreshold;
+    
+    // Check if pinky is extended (farther from wrist than its MCP)
+    const pinkyTipDist = Math.hypot(pinkyTip.x - wrist.x, pinkyTip.y - wrist.y);
+    const pinkyMcpDist = Math.hypot(pinkyMcp.x - wrist.x, pinkyMcp.y - wrist.y);
+    const pinkyExtended = pinkyTipDist > pinkyMcpDist * 1.1;
+    
+    return fingersPinched && pinkyExtended;
+};
+
+// Calculate the center position of the hand (using wrist as center point)
 const getHandCenter = (landmarks: NormalizedLandmarkList): { x: number; y: number } => {
-    // Use average of wrist and MCP joints for palm center
-    const points = [
-        landmarks[WRIST],
-        landmarks[INDEX_MCP],
-        landmarks[MIDDLE_MCP],
-        landmarks[RING_MCP],
-        landmarks[PINKY_MCP]
-    ];
-    
-    const center = points.reduce(
-        (acc, point) => ({ x: acc.x + point.x, y: acc.y + point.y }),
-        { x: 0, y: 0 }
-    );
-    
+    // Use wrist position as the hand center point
+    const wrist = landmarks[WRIST];
     return {
-        x: center.x / points.length,
-        y: center.y / points.length
+        x: wrist.x,
+        y: wrist.y
     };
 };
 
@@ -211,7 +232,8 @@ const Webcam: React.FC<WebcamProps> = ({
         leftHand: null,
         rightHand: null,
         wingspan: 0.5,
-        sensitivityScale: 2
+        sensitivityScale: 2,
+        bodyCenter: { x: 0.5, y: 0.5 } // Default to center of frame
     });
 
     // Process hand detection results
@@ -258,11 +280,12 @@ const Webcam: React.FC<WebcamProps> = ({
                 const handData: HandData = {
                     position: getHandCenter(landmarks),
                     isOpen: isHandOpen(landmarks),
+                    isPinching: isHandPinching(landmarks),
                     handedness: actualHandedness as 'Left' | 'Right',
                     landmarks: landmarks
                 };
                 
-                console.log(`[Webcam] Hand ${i}: ${actualHandedness}, Open: ${handData.isOpen}, Pos: (${handData.position.x.toFixed(2)}, ${handData.position.y.toFixed(2)})`);
+                console.log(`[Webcam] Hand ${i}: ${actualHandedness}, Open: ${handData.isOpen}, Pinching: ${handData.isPinching}, Pos: (${handData.position.x.toFixed(2)}, ${handData.position.y.toFixed(2)})`);
                 
                 if (actualHandedness === 'Left') {
                     leftHand = handData;
@@ -354,7 +377,8 @@ const Webcam: React.FC<WebcamProps> = ({
             leftHand,
             rightHand,
             wingspan: gestureStateRef.current.wingspan,
-            sensitivityScale: gestureStateRef.current.sensitivityScale
+            sensitivityScale: gestureStateRef.current.sensitivityScale,
+            bodyCenter: gestureStateRef.current.bodyCenter
         };
         
         onGestureUpdate(gestureStateRef.current);
@@ -365,6 +389,18 @@ const Webcam: React.FC<WebcamProps> = ({
         if (results.poseLandmarks) {
             const newWingspan = calculateWingspan(results.poseLandmarks);
             
+            // Calculate body center (midpoint between shoulders)
+            const leftShoulder = results.poseLandmarks[LEFT_SHOULDER];
+            const rightShoulder = results.poseLandmarks[RIGHT_SHOULDER];
+            let bodyCenter = gestureStateRef.current.bodyCenter; // Keep previous if detection fails
+            
+            if (leftShoulder && rightShoulder) {
+                bodyCenter = {
+                    x: (leftShoulder.x + rightShoulder.x) / 2,
+                    y: (leftShoulder.y + rightShoulder.y) / 2
+                };
+            }
+            
             if (newWingspan > 0.1) { // Only update if we have a valid measurement
                 // Calculate sensitivity scale (inverse of wingspan)
                 // Normalize so that a "typical" wingspan of ~0.6 gives a scale of 1
@@ -373,7 +409,14 @@ const Webcam: React.FC<WebcamProps> = ({
                 gestureStateRef.current = {
                     ...gestureStateRef.current,
                     wingspan: newWingspan,
-                    sensitivityScale
+                    sensitivityScale,
+                    bodyCenter
+                };
+            } else {
+                // Still update body center even if wingspan is invalid
+                gestureStateRef.current = {
+                    ...gestureStateRef.current,
+                    bodyCenter
                 };
             }
             
@@ -497,8 +540,11 @@ const Webcam: React.FC<WebcamProps> = ({
                     onFrame: async () => {
                         if (videoRef.current && handsRef.current && poseRef.current) {
                             try {
-                                await handsRef.current.send({ image: videoRef.current });
+                                // IMPORTANT: Process pose FIRST to update sensitivityScale
+                                // before hands are processed. This ensures the hand deltas
+                                // are scaled by the current frame's wingspan, not a stale value.
                                 await poseRef.current.send({ image: videoRef.current });
+                                await handsRef.current.send({ image: videoRef.current });
                             } catch (err) {
                                 console.error('[Webcam] Error processing frame:', err);
                             }
