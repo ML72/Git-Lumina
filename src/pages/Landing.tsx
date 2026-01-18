@@ -469,7 +469,7 @@ const Landing: React.FC = () => {
                           }}
                        />
                        <Typography variant="caption" sx={{ mt: 1, display: 'block', color: '#8b949e' }}>
-                          Enter the repository URL. We'll fetch the main branch.
+                          Note: We currently use third-party CORS proxies to allow our app to run entirely in the browser. Fetching larger repositories is unsupported. Please upload larger repositories as a ZIP file.
                        </Typography>
                     </Box>
                   )}

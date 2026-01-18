@@ -11,7 +11,7 @@ import './App.css';
 const App: React.FC = () => {
 
   return (
-    <BrowserRouter>
+    <BrowserRouter basename={import.meta.env.BASE_URL}>
       <Routes>
         {/** Page routing here */}
         <Route path="/" element={<Landing />} />
