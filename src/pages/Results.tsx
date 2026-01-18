@@ -127,13 +127,6 @@ const Results: React.FC = () => {
   // Section toggle state
   const [activeSection, setActiveSection] = useState<string>('insights');
   
-  const handleSectionToggle = (section: string) => {
-    setActiveSection(activeSection === section ? '' : section);
-    if (!isSidebarOpen) {
-      setIsSidebarOpen(true);
-    }
-  };
-  
   // Quest data and state
   const [quests, setQuests] = useState([
     { id: 1, title: 'Understand Entry Point', description: 'Find where the app starts', completed: false },
@@ -154,19 +147,6 @@ const Results: React.FC = () => {
     'Explain the data flow',
     'What are the main components?'
   ];
-  
-  const handleSuggestedQuestion = (question: string) => {
-    setChat(prev => [...prev, { id: Date.now(), sender: 'user', text: question }]);
-    setQuery('');
-    // Simulate AI response
-    setTimeout(() => {
-      setChat(prev => [...prev, { 
-        id: Date.now() + 1, 
-        sender: 'system', 
-        text: `I'll analyze that for you. Based on the codebase structure, ${question.toLowerCase().includes('auth') ? 'authentication is handled through the AuthProvider component using context and custom hooks.' : 'the architecture follows standard React patterns with Redux for state management.'}` 
-      }]);
-    }, 1000);
-  };
   
   // Handle gesture updates from webcam
   const handleGestureUpdate = useCallback((gestureState: GestureState) => {
@@ -209,6 +189,40 @@ const Results: React.FC = () => {
   }, [processGesture]);
   
   // Cleanup timer on unmount
+
+  const handleSuggestedQuestion = (text: string) => {
+      setChat(prev => [...prev, { id: Date.now(), sender: 'user', text }]);
+      // Simulate response for better UX
+      setTimeout(() => {
+          setChat(prev => [...prev, { id: Date.now() + 1, sender: 'system', text: `Analyzing ${text.toLowerCase()}... (Simulation)` }]);
+      }, 800);
+      setQuery('');
+  };
+
+  const handleSectionToggle = (section: 'insights' | 'quests' | 'cortex' | 'categories') => {
+      if (activeSection === section) {
+        setActiveSection('');
+      } else {
+        setActiveSection(section);
+        if (!isSidebarOpen) {
+            setIsSidebarOpen(true);
+        }
+      }
+  };
+
+  // Resize Handlers
+  const startResizing = useCallback(() => setIsResizing(true), []);
+  const stopResizing = useCallback(() => setIsResizing(false), []);
+  
+  const resize = useCallback((mouseMoveEvent: MouseEvent) => {
+      if (isResizing) {
+          const newWidth = mouseMoveEvent.clientX;
+          if (newWidth > 260 && newWidth < 600) {
+              setSidebarWidth(newWidth);
+          }
+      }
+  }, [isResizing]);
+
   useEffect(() => {
     return () => {
       if (noHandsTimerRef.current) {
