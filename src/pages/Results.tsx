@@ -359,7 +359,7 @@ const Results: React.FC = () => {
                     flex: 1, 
                     display: 'flex', 
                     flexDirection: 'column', 
-                    overflowY: 'hidden',
+                    overflowY: activeSection === 'cortex' ? 'hidden' : 'auto',
                     minWidth: sidebarWidth, 
                     position: 'relative',
                     zIndex: 1,
