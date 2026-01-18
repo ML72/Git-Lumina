@@ -51,6 +51,7 @@ import GraphDisplay, { GraphDisplayRef } from '../components/GraphDisplay';
 import Webcam, { GestureState } from '../components/Webcam';
 import useGestureControls, { GestureControlState } from '../hooks/useGestureControls';
 import { selectGraph } from '../store/slices/graph';
+import { getLanguageFromExtension } from '../utils/languageSyntax';
 
 const CATEGORY_COLORS = [
     '#FF6B6B', '#4ECDC4', '#45B7D1', '#FFA07A', '#98D8C8',
@@ -61,16 +62,6 @@ const CATEGORY_COLORS = [
 const MOCK_CHAT = [
   { id: 1, sender: 'system', text: 'Hello! I am Cortex, acts as your AI assistant for this codebase. Ask me anything about the structure, dependencies, or specific files.' },
 ];
-
-const MOCK_INFO = {
-  name: "project-repository",
-  stats: {
-    files: 142,
-    components: 28,
-    linesOfCode: 15420
-  },
-  layers: ['Presentation', 'Business Logic', 'Data Access']
-};
 
 const Results: React.FC = () => {
   const theme = useTheme();
@@ -150,7 +141,33 @@ const Results: React.FC = () => {
     // Sort by file count descending
     return stats.sort((a: any, b: any) => b.files - a.files);
   }, [graph]);
-  
+
+  const totalLoc = React.useMemo(() => {
+    return graph?.nodes?.reduce((acc: number, node: any) => acc + (node.num_lines || 0), 0) || 0;
+  }, [graph]);
+
+  const languageStats = React.useMemo(() => {
+    if (!graph?.nodes) return [];
+
+    const stats: Record<string, number> = {};
+    let calculatedTotalLoc = 0;
+
+    graph.nodes.forEach((node: any) => {
+      const lang = getLanguageFromExtension(node.filepath);
+      const loc = node.num_lines || 0;
+      stats[lang] = (stats[lang] || 0) + loc;
+      calculatedTotalLoc += loc;
+    });
+
+    return Object.entries(stats)
+      .map(([lang, lines]) => ({
+        language: lang.charAt(0).toUpperCase() + lang.slice(1),
+        lines,
+        percentage: calculatedTotalLoc > 0 ? (lines / calculatedTotalLoc) * 100 : 0
+      }))
+      .sort((a, b) => b.lines - a.lines);
+  }, [graph]);
+
   // Quest data and state
   const [quests, setQuests] = useState([
     { id: 1, title: 'Understand Entry Point', description: 'Find where the app starts', completed: false },
@@ -293,22 +310,17 @@ const Results: React.FC = () => {
           {/* Header Section */}
           <Box sx={{ p: 3, borderBottom: `1px solid ${theme.palette.divider}`, display: isSidebarOpen ? 'block' : 'none' }}>
             <Typography variant="h5" fontWeight="bold" gutterBottom noWrap>
-              {graph?.name || MOCK_INFO.name}
+              {graph?.name || 'Repository'}
             </Typography>
-            <Stack direction="row" spacing={1} mb={2}>
-              <Chip label="TypeScript" size="small" color="primary" variant="outlined" />
-              <Chip label="React" size="small" color="secondary" variant="outlined" />
-              <Chip label="v1.0.2" size="small" variant="outlined" />
-            </Stack>
             
-            <Stack direction="row" spacing={3} sx={{ color: 'text.secondary' }}>
+            <Stack direction="row" spacing={3} sx={{ color: 'text.secondary', mt: 1 }}>
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
                 <FileIcon fontSize="small" />
-                <Typography variant="body2">{graph?.nodes?.length || MOCK_INFO.stats.files} Files</Typography>
+                <Typography variant="body2">{graph?.nodes?.length || 0} Files</Typography>
               </Box>
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
                 <CodeIcon fontSize="small" />
-                <Typography variant="body2">{(MOCK_INFO.stats.linesOfCode / 1000).toFixed(1)}k LOC</Typography>
+                <Typography variant="body2">{(totalLoc / 1000).toFixed(1)}k LOC</Typography>
               </Box>
             </Stack>
           </Box>
@@ -343,8 +355,53 @@ const Results: React.FC = () => {
                         
                         <Collapse in={activeSection === 'insights'}>
                             <Box sx={{ px: 2, pb: 2 }}>
-                                <Typography variant="body2" paragraph sx={{ whiteSpace: 'normal', color: 'rgba(255,255,255,0.7)' }}>
+                                <Typography variant="body2" paragraph sx={{ whiteSpace: 'normal', color: 'rgba(255,255,255,0.7)', mb: 2 }}>
                                     {graph?.nodes ? `${graph.nodes.length} files analyzed across ${graph.categories.length} categories.` : "Analyzing repository structure..."}
+                                </Typography>
+
+                                {/* Language Breakdown */}
+                                {languageStats.length > 0 && (
+                                    <Box sx={{ mb: 3 }}>
+                                        <Typography variant="overline" sx={{ color: 'text.secondary', fontWeight: 600, display: 'block', mb: 1 }}>
+                                            LANGUAGE COMPOSITION
+                                        </Typography>
+                                        <Stack spacing={1.5}>
+                                            {languageStats.slice(0, 5).map((stat, idx) => (
+                                                <Box key={stat.language}>
+                                                    <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5, alignItems: 'center' }}>
+                                                        <Typography variant="body2" sx={{ fontSize: '0.85rem' }}>
+                                                            {stat.language}
+                                                        </Typography>
+                                                        <Typography variant="caption" sx={{ color: 'text.secondary' }}>
+                                                            {stat.percentage.toFixed(1)}%
+                                                        </Typography>
+                                                    </Box>
+                                                    <Box 
+                                                        sx={{ 
+                                                            width: '100%', 
+                                                            height: 4, 
+                                                            bgcolor: 'rgba(255,255,255,0.08)', 
+                                                            borderRadius: 2,
+                                                            overflow: 'hidden'
+                                                        }}
+                                                    >
+                                                        <Box 
+                                                            sx={{ 
+                                                                width: `${stat.percentage}%`, 
+                                                                height: '100%', 
+                                                                bgcolor: CATEGORY_COLORS[idx % CATEGORY_COLORS.length], 
+                                                                borderRadius: 2 
+                                                            }} 
+                                                        />
+                                                    </Box>
+                                                </Box>
+                                            ))}
+                                        </Stack>
+                                    </Box>
+                                )}
+                                
+                                <Typography variant="overline" sx={{ color: 'text.secondary', fontWeight: 600, display: 'block', mb: 1 }}>
+                                    TOP CATEGORIES
                                 </Typography>
                                 
 
