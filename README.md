@@ -1,6 +1,8 @@
 # Git Lumina
 
-Git-Lumina is a powerful **Repository Visualizer** designed to help developers understand codebases quickly and intuitively.
+![Demo Results](public/demo_results.png)
+
+Git Lumina is a powerful **Repository Visualizer** designed to help developers understand codebases quickly and intuitively.
 
 By uploading a codebase (via a ZIP file or a GitHub URL), users generate an interactive graph where:
 - **Nodes** represent files.
