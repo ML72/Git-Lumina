@@ -40,6 +40,8 @@ const Landing: React.FC = () => {
   const [apiKey, setApiKey] = useState('');
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [fileName, setFileName] = useState<string | null>(null);
+  const [repoUrl, setRepoUrl] = useState('');
+  const [zipFile, setZipFile] = useState<File | null>(null);
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
   
@@ -53,6 +55,33 @@ const Landing: React.FC = () => {
     const file = event.target.files && event.target.files[0];
     if (file) {
       setFileName(file.name);
+      setZipFile(file);
+    }
+  };
+
+  const handleGithubDownload = async () => {
+    if (!repoUrl) return;
+    let zipUrl = repoUrl.trim();
+    // If user pasted a repo, not a zip, convert to zip URL
+    if (!zipUrl.endsWith('.zip')) {
+      // Remove trailing slash if present
+      zipUrl = zipUrl.replace(/\/$/, '');
+      zipUrl += '/archive/refs/heads/main.zip';
+    }
+    // Ensure protocol
+    if (!/^https?:\/\//i.test(zipUrl)) {
+      zipUrl = 'https://' + zipUrl;
+    }
+    const proxyUrl = `https://cors-proxy-murex-three.vercel.app/api/cors?url=${encodeURIComponent(zipUrl)}`;
+    try {
+      const res = await fetch(proxyUrl);
+      if (!res.ok) throw new Error('Failed to fetch zip');
+      const blob = await res.blob();
+      const file = new File([blob], "repo.zip", { type: "application/zip" });
+      setFileName(file.name);
+      setZipFile(file);
+    } catch (e) {
+      alert('Failed to download zip from GitHub.');
     }
   };
 
@@ -60,9 +89,10 @@ const Landing: React.FC = () => {
     console.log('Starting analysis with:', {
       source: fileName,
       apiKey,
-      settings: { is3D, includeTests, fileExtensions }
+      settings: { is3D, includeTests, fileExtensions },
+      zipFile
     });
-    // Add logic to dispatch action or navigate
+    // Add logic to dispatch action or navigate, using zipFile
   };
 
   // Feature card component
@@ -266,6 +296,18 @@ const Landing: React.FC = () => {
               <Box sx={{ p: 4 }}>
                 <Stack spacing={3}>
                   
+                  {/* GitHub Repo/Zip Input */}
+                  <TextField
+                    fullWidth
+                    label="GitHub Repo or Zip URL"
+                    value={repoUrl}
+                    onChange={e => setRepoUrl(e.target.value)}
+                    sx={{ mb: 2 }}
+                  />
+                  <Button onClick={handleGithubDownload} disabled={!repoUrl} sx={{ mb: 2 }}>
+                    Download from GitHub
+                  </Button>
+
                   {/* File Upload Input */}
                   <Box 
                       sx={{ 
