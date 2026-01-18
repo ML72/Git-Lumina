@@ -30,11 +30,33 @@ export const graphSlice = createSlice({
             state.graph = null;
             state.description = '';
             state.name = '';
+        },
+        updateGraphCategories: (state, action: PayloadAction<{ categories: string[], assignments: Record<string, string> }>) => {
+            if (!state.graph) return;
+
+            const { categories, assignments } = action.payload;
+            
+            // Update the categories list
+            state.graph.categories = categories;
+
+            // Update each node's category index
+            state.graph.nodes.forEach(node => {
+                const categoryName = assignments[node.filepath];
+                if (categoryName) {
+                    const categoryIndex = categories.indexOf(categoryName);
+                    if (categoryIndex !== -1) {
+                        node.category = categoryIndex;
+                    } else {
+                        // Fallback
+                        node.category = 0; 
+                    }
+                }
+            });
         }
     }
 });
 
-export const { setGraph, setDescription, setName, resetGraphState } = graphSlice.actions;
+export const { setGraph, setDescription, setName, resetGraphState, updateGraphCategories } = graphSlice.actions;
 
 export const selectGraph = (state: any) => state.graph.graph;
 export const selectDescription = (state: any) => state.graph.description;
