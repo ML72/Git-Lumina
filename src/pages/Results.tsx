@@ -127,6 +127,30 @@ const Results: React.FC = () => {
   // Section toggle state
   const [activeSection, setActiveSection] = useState<string>('insights');
   
+  // Compute category statistics
+  const categoryStats = React.useMemo(() => {
+    if (!graph?.nodes || !graph?.categories) return [];
+    
+    // Initialize stats
+    const stats = graph.categories.map((cat: any) => ({
+        name: cat,
+        files: 0,
+        lines: 0
+    }));
+
+    // Aggregate from nodes
+    graph.nodes.forEach((node: any) => {
+        const cat = node.category;
+        if (stats[cat]) {
+            stats[cat].files++;
+            stats[cat].lines += node.num_lines || 0;
+        }
+    });
+
+    // Sort by file count descending
+    return stats.sort((a: any, b: any) => b.files - a.files);
+  }, [graph]);
+  
   // Quest data and state
   const [quests, setQuests] = useState([
     { id: 1, title: 'Understand Entry Point', description: 'Find where the app starts', completed: false },
@@ -327,22 +351,46 @@ const Results: React.FC = () => {
                                 <Typography variant="caption" fontWeight="bold" sx={{ mt: 1, display: 'block', color: 'rgba(255,255,255,0.5)' }}>
                                     TOP CATEGORIES
                                 </Typography>
-                                <Box sx={{ display: 'flex', gap: 1, mt: 1, flexWrap: 'wrap' }}>
-                                    {graph?.categories.slice(0, 5).map((cat: string, i: number) => (
-                                        <Chip 
-                                            key={cat} 
-                                            label={cat} 
-                                            size="small" 
-                                            variant="outlined" 
-                                            sx={{ 
-                                                fontWeight: 'bold', 
-                                                borderColor: alpha(CATEGORY_COLORS[i % CATEGORY_COLORS.length], 0.4), 
-                                                color: CATEGORY_COLORS[i % CATEGORY_COLORS.length], 
-                                                bgcolor: alpha(CATEGORY_COLORS[i % CATEGORY_COLORS.length], 0.1) 
-                                            }} 
-                                        />
-                                    ))}
-                                </Box>
+                                <List dense sx={{ mt: 1, p: 0 }}>
+                                    {categoryStats.slice(0, 5).map((stat: any, i: number) => {
+                                        const colorIndex = graph?.categories.indexOf(stat.name) ?? i;
+                                        const color = CATEGORY_COLORS[colorIndex % CATEGORY_COLORS.length];
+                                        return (
+                                            <ListItem key={stat.name} sx={{ 
+                                                py: 0.5, 
+                                                px: 1,
+                                                mb: 0.5,
+                                                borderRadius: 1, 
+                                                bgcolor: alpha(color, 0.1),
+                                                border: `1px solid ${alpha(color, 0.2)}`
+                                            }}>
+                                                <ListItemText 
+                                                    primary={
+                                                        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                                            <Typography variant="body2" sx={{ fontWeight: 600, color: color }}>
+                                                                {stat.name}
+                                                            </Typography>
+                                                            <Typography variant="caption" sx={{ color: 'rgba(255,255,255,0.7)', fontWeight: 500 }}>
+                                                                {stat.files} files
+                                                            </Typography>
+                                                        </Box>
+                                                    }
+                                                    secondary={
+                                                        <Box sx={{ display: 'flex', justifyContent: 'space-between', width: '100%' }}>
+                                                            <Typography variant="caption" sx={{ color: 'rgba(255,255,255,0.4)', fontSize: '0.7rem' }}>
+                                                                Total lines
+                                                            </Typography>
+                                                            <Typography variant="caption" sx={{ color: 'rgba(255,255,255,0.4)', fontSize: '0.7rem' }}>
+                                                                {(stat.lines).toLocaleString()}
+                                                            </Typography>
+                                                        </Box>
+                                                    }
+                                                    secondaryTypographyProps={{ component: 'div' }}
+                                                />
+                                            </ListItem>
+                                        );
+                                    })}
+                                </List>
                             </Box>
                         </Collapse>
                     </Box>
