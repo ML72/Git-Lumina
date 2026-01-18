@@ -4,6 +4,7 @@ import { useSelector } from 'react-redux';
 import { GraphCanvas, GraphNode, GraphEdge, darkTheme, lightTheme, GraphCanvasRef } from 'reagraph';
 import { selectGraph } from '../store/slices/graph';
 import { GestureControlState } from '../hooks/useGestureControls';
+import { CodebaseGraph } from '../types/CodebaseGraph';
 
 export interface GraphDisplayRef {
     applyGestureControl: (control: GestureControlState) => void;
@@ -13,11 +14,13 @@ export interface GraphDisplayRef {
 interface GraphDisplayProps {
     cursors?: GestureControlState['cursors'];
     isGestureActive?: boolean; // Pause animation when user is controlling with gestures
+    graph?: CodebaseGraph | null; // Optional direct graph prop
 }
 
-const GraphDisplay = forwardRef<GraphDisplayRef, GraphDisplayProps>(({ cursors, isGestureActive = false }, ref) => {
+const GraphDisplay = forwardRef<GraphDisplayRef, GraphDisplayProps>(({ cursors, isGestureActive = false, graph }, ref) => {
     const theme = useTheme();
-    const graphData = useSelector(selectGraph);
+    const reduxGraph = useSelector(selectGraph);
+    const graphData = graph || reduxGraph; // Use prop if provided, otherwise use Redux
     const graphRef = useRef<GraphCanvasRef | null>(null);
     const containerRef = useRef<HTMLDivElement>(null);
     
@@ -224,8 +227,6 @@ const GraphDisplay = forwardRef<GraphDisplayRef, GraphDisplayProps>(({ cursors, 
                         pointerEvents: 'none'
                     }}
                 />
-                {/* Render cursors even when no data */}
-                {cursors && <CursorOverlay cursors={cursors} />}
             </Box>
         );
     }
@@ -249,97 +250,15 @@ const GraphDisplay = forwardRef<GraphDisplayRef, GraphDisplayProps>(({ cursors, 
                 theme={theme.palette.mode === 'dark' ? darkTheme : lightTheme}
                 draggable
                 animated={!isGestureActive} // Pause animation when user is controlling with gestures
-                cameraMode="orbit"
+                cameraMode="rotate"
                 layoutOverrides={{
                     nodeStrength: -1000,
                     linkDistance: 150
                 }}
             />
-            {/* Render gesture cursors overlay */}
-            {cursors && <CursorOverlay cursors={cursors} />}
         </Box>
     );
 });
-
-// Cursor overlay component to show hand positions on the graph
-interface CursorOverlayProps {
-    cursors: GestureControlState['cursors'];
-}
-
-const CursorOverlay: React.FC<CursorOverlayProps> = ({ cursors }) => {
-    return (
-        <Box
-            sx={{
-                position: 'absolute',
-                top: 0,
-                left: 0,
-                right: 0,
-                bottom: 0,
-                pointerEvents: 'none',
-                zIndex: 1000
-            }}
-        >
-            {cursors.left && (
-                <Box
-                    sx={{
-                        position: 'absolute',
-                        left: `${cursors.left.x * 100}%`,
-                        top: `${cursors.left.y * 100}%`,
-                        transform: 'translate(-50%, -50%)',
-                        width: cursors.left.isActive ? 40 : 30,
-                        height: cursors.left.isActive ? 40 : 30,
-                        borderRadius: '50%',
-                        border: `3px solid ${cursors.left.isActive ? '#FF6B6B' : '#FF6B6B80'}`,
-                        backgroundColor: cursors.left.isActive ? 'rgba(255, 107, 107, 0.3)' : 'transparent',
-                        transition: 'all 0.1s ease-out',
-                        boxShadow: cursors.left.isActive 
-                            ? '0 0 20px rgba(255, 107, 107, 0.5), inset 0 0 15px rgba(255, 107, 107, 0.3)' 
-                            : 'none',
-                        '&::after': {
-                            content: '"L"',
-                            position: 'absolute',
-                            top: '50%',
-                            left: '50%',
-                            transform: 'translate(-50%, -50%)',
-                            color: '#FF6B6B',
-                            fontSize: '12px',
-                            fontWeight: 'bold'
-                        }
-                    }}
-                />
-            )}
-            {cursors.right && (
-                <Box
-                    sx={{
-                        position: 'absolute',
-                        left: `${cursors.right.x * 100}%`,
-                        top: `${cursors.right.y * 100}%`,
-                        transform: 'translate(-50%, -50%)',
-                        width: cursors.right.isActive ? 40 : 30,
-                        height: cursors.right.isActive ? 40 : 30,
-                        borderRadius: '50%',
-                        border: `3px solid ${cursors.right.isActive ? '#4ECDC4' : '#4ECDC480'}`,
-                        backgroundColor: cursors.right.isActive ? 'rgba(78, 205, 196, 0.3)' : 'transparent',
-                        transition: 'all 0.1s ease-out',
-                        boxShadow: cursors.right.isActive 
-                            ? '0 0 20px rgba(78, 205, 196, 0.5), inset 0 0 15px rgba(78, 205, 196, 0.3)' 
-                            : 'none',
-                        '&::after': {
-                            content: '"R"',
-                            position: 'absolute',
-                            top: '50%',
-                            left: '50%',
-                            transform: 'translate(-50%, -50%)',
-                            color: '#4ECDC4',
-                            fontSize: '12px',
-                            fontWeight: 'bold'
-                        }
-                    }}
-                />
-            )}
-        </Box>
-    );
-};
 
 GraphDisplay.displayName = 'GraphDisplay';
 

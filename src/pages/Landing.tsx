@@ -122,17 +122,17 @@ const Landing: React.FC = () => {
   const handleStartAnalysis = async () => {
     // 1. Validation
     if (!apiKey) {
-      setNewAlert(dispatch, { msg: "Please enter your OpenAI API Key", alertType: "error" });
+      setNewAlert(dispatch, { msg: "Please enter your OpenAI API Key.", alertType: "error" });
       return;
     }
 
     if (uploadMode === 'github' && !githubUrl) {
-      setNewAlert(dispatch, { msg: "Please enter a valid GitHub repository URL", alertType: "error" });
+      setNewAlert(dispatch, { msg: "Please enter a valid GitHub repository URL.", alertType: "error" });
       return;
     }
 
     if (uploadMode === 'upload' && !selectedFile) {
-      setNewAlert(dispatch, { msg: "Please upload a ZIP file of your codebase", alertType: "error" });
+      setNewAlert(dispatch, { msg: "Please upload a ZIP file of your codebase.", alertType: "error" });
       return;
     }
 
@@ -150,7 +150,7 @@ const Landing: React.FC = () => {
                 setSelectedFile(fileToProcess);
             } catch (error: any) {
                 console.error(error);
-                setNewAlert(dispatch, { msg: error.message || 'Failed to download GitHub repository, please use a zip file instead', alertType: "error" });
+                setNewAlert(dispatch, { msg: error.message || 'Failed to download GitHub repository, please use a zip file instead.', alertType: "error" });
                 setIsLoading(false);
                 return;
             }
@@ -168,7 +168,7 @@ const Landing: React.FC = () => {
 
     } catch (error: any) {
         console.error(error);
-        setNewAlert(dispatch, { msg: error.message || "An unexpected error occurred", alertType: "error" });
+        setNewAlert(dispatch, { msg: error.message || "An unexpected error occurred.", alertType: "error" });
     } finally {
         setIsLoading(false);
     }

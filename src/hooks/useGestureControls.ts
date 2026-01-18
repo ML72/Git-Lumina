@@ -42,7 +42,7 @@ interface PreviousState {
 
 // Sensitivity multipliers
 const PAN_SENSITIVITY = 10;
-const ZOOM_SENSITIVITY = 15;
+const ZOOM_SENSITIVITY = 45;
 
 // Smoothing factors (0 = no smoothing/instant, 1 = infinite smoothing/no movement)
 // Lower values = more responsive but jittery
