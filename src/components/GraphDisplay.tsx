@@ -1,13 +1,32 @@
-import React, { useMemo, useRef, useEffect } from 'react';
+import React, { useMemo, useRef, useEffect, useCallback, useImperativeHandle, forwardRef } from 'react';
 import { Box, Typography, useTheme } from '@mui/material';
 import { useSelector } from 'react-redux';
 import { GraphCanvas, GraphNode, GraphEdge, darkTheme, lightTheme, GraphCanvasRef } from 'reagraph';
 import { selectGraph } from '../store/slices/graph';
+import { GestureControlState } from '../hooks/useGestureControls';
 
-const GraphDisplay: React.FC = () => {
+export interface GraphDisplayRef {
+    applyGestureControl: (control: GestureControlState) => void;
+    resetView: () => void;
+}
+
+interface GraphDisplayProps {
+    cursors?: GestureControlState['cursors'];
+    isGestureActive?: boolean; // Pause animation when user is controlling with gestures
+}
+
+const GraphDisplay = forwardRef<GraphDisplayRef, GraphDisplayProps>(({ cursors, isGestureActive = false }, ref) => {
     const theme = useTheme();
     const graphData = useSelector(selectGraph);
     const graphRef = useRef<GraphCanvasRef | null>(null);
+    const containerRef = useRef<HTMLDivElement>(null);
+    
+    // Track accumulated camera state for gesture controls
+    const cameraStateRef = useRef({
+        panX: 0,
+        panY: 0,
+        zoom: 1
+    });
 
     // Color palette for category mapping
     const categoryColors = [
@@ -46,6 +65,81 @@ const GraphDisplay: React.FC = () => {
         return { nodes: myNodes, edges: myEdges };
     }, [graphData]);
 
+    // Track frame count for debug logging
+    const frameCountRef = useRef(0);
+    
+    // Apply gesture-based camera controls
+    const applyGestureControl = useCallback((control: GestureControlState) => {
+        if (!graphRef.current) return;
+        
+        const { panDelta, zoomDelta, isActive, activeHandCount, mode } = control;
+        
+        frameCountRef.current++;
+        
+        if (!isActive) return;
+        
+        // Get the camera controls from reagraph
+        const controls = graphRef.current.getControls();
+        if (!controls) {
+            console.warn('[GraphDisplay] Controls not available');
+            return;
+        }
+        
+        // Debug log for two-hand mode
+        if (activeHandCount === 2 || mode === 'two-hand-zoom') {
+            console.log(`[GraphDisplay] TWO-HAND MODE - zoomDelta: ${zoomDelta.toFixed(4)}, panDelta: (${panDelta.x.toFixed(4)}, ${panDelta.y.toFixed(4)})`);
+        }
+        
+        // Temporarily enable controls to apply our programmatic changes
+        const wasEnabled = controls.enabled;
+        controls.enabled = true;
+        
+        // Apply panning (truck) - moves camera left/right and up/down
+        if (panDelta.x !== 0 || panDelta.y !== 0) {
+            const panSpeed = 500; // Adjust for panning sensitivity
+            
+            // Truck moves the camera: positive x = right, positive y = up
+            // Hand moving right should move content right (camera moves left)
+            // Hand moving down should move content down (camera moves up)
+            controls.truck(panDelta.x * panSpeed, -panDelta.y * panSpeed, false);
+        }
+        
+        // Apply zoom using dolly
+        if (zoomDelta !== 0) {
+            const zoomSpeed = 500;
+            
+            console.log(`[GraphDisplay] APPLYING ZOOM: ${zoomDelta * zoomSpeed}`);
+            
+            // Positive zoomDelta means hands moving apart = zoom in (dolly forward)
+            // Negative zoomDelta means hands moving together = zoom out (dolly backward)
+            controls.dolly(zoomDelta * zoomSpeed, false);
+        }
+        
+        // Apply the changes immediately without animation
+        controls.update(0);
+        
+        // Restore enabled state (keep disabled to prevent mouse/touch interference)
+        controls.enabled = wasEnabled;
+    }, []);
+    
+    // Reset view to initial state
+    const resetView = useCallback(() => {
+        if (graphRef.current) {
+            graphRef.current.fitNodesInView();
+        }
+        cameraStateRef.current = {
+            panX: 0,
+            panY: 0,
+            zoom: 1
+        };
+    }, []);
+    
+    // Expose methods to parent
+    useImperativeHandle(ref, () => ({
+        applyGestureControl,
+        resetView
+    }), [applyGestureControl, resetView]);
+
     useEffect(() => {
         if (graphRef.current && nodes.length > 0) {
             // Slight delay to allow layout to stabilize before fitting
@@ -54,10 +148,54 @@ const GraphDisplay: React.FC = () => {
             }, 1000);
         }
     }, [nodes]);
+    
+    // Track previous gesture active state to detect transitions
+    const wasGestureActiveRef = useRef(false);
+    // Store original settings to restore later
+    const originalSettingsRef = useRef({ 
+        azimuth: 1, 
+        polar: 1,
+        enabled: true 
+    });
+    
+    // Pause/resume rotation based on gesture state - stops spinning when gestures are active
+    useEffect(() => {
+        if (!graphRef.current) return;
+        
+        const controls = graphRef.current.getControls();
+        if (!controls) return;
+        
+        if (isGestureActive && !wasGestureActiveRef.current) {
+            // Just became active - save current settings and disable everything
+            console.log('[GraphDisplay] Gesture started - disabling all camera controls');
+            originalSettingsRef.current = {
+                azimuth: controls.azimuthRotateSpeed,
+                polar: controls.polarRotateSpeed,
+                enabled: controls.enabled
+            };
+            // Disable ALL camera controls including user input
+            controls.enabled = false;
+            controls.azimuthRotateSpeed = 0;
+            controls.polarRotateSpeed = 0;
+            controls.dampingFactor = 0;
+            // Stop any ongoing movement immediately
+            controls.update(0);
+        } else if (!isGestureActive && wasGestureActiveRef.current) {
+            // Just became inactive - restore settings
+            console.log('[GraphDisplay] Gesture ended - re-enabling camera controls');
+            controls.enabled = originalSettingsRef.current.enabled;
+            controls.azimuthRotateSpeed = originalSettingsRef.current.azimuth;
+            controls.polarRotateSpeed = originalSettingsRef.current.polar;
+            controls.dampingFactor = 0.1;
+        }
+        
+        wasGestureActiveRef.current = isGestureActive;
+    }, [isGestureActive]);
 
     if (!graphData) {
         return (
             <Box 
+                ref={containerRef}
                 sx={{ 
                     width: '100%', 
                     height: '100%', 
@@ -86,12 +224,15 @@ const GraphDisplay: React.FC = () => {
                         pointerEvents: 'none'
                     }}
                 />
+                {/* Render cursors even when no data */}
+                {cursors && <CursorOverlay cursors={cursors} />}
             </Box>
         );
     }
 
     return (
         <Box 
+            ref={containerRef}
             sx={{ 
                 width: '100%', 
                 height: '100%', 
@@ -107,15 +248,99 @@ const GraphDisplay: React.FC = () => {
                 labelType="all"
                 theme={theme.palette.mode === 'dark' ? darkTheme : lightTheme}
                 draggable
-                animated
+                animated={!isGestureActive} // Pause animation when user is controlling with gestures
                 cameraMode="orbit"
                 layoutOverrides={{
                     nodeStrength: -1000,
                     linkDistance: 150
                 }}
             />
+            {/* Render gesture cursors overlay */}
+            {cursors && <CursorOverlay cursors={cursors} />}
+        </Box>
+    );
+});
+
+// Cursor overlay component to show hand positions on the graph
+interface CursorOverlayProps {
+    cursors: GestureControlState['cursors'];
+}
+
+const CursorOverlay: React.FC<CursorOverlayProps> = ({ cursors }) => {
+    return (
+        <Box
+            sx={{
+                position: 'absolute',
+                top: 0,
+                left: 0,
+                right: 0,
+                bottom: 0,
+                pointerEvents: 'none',
+                zIndex: 1000
+            }}
+        >
+            {cursors.left && (
+                <Box
+                    sx={{
+                        position: 'absolute',
+                        left: `${cursors.left.x * 100}%`,
+                        top: `${cursors.left.y * 100}%`,
+                        transform: 'translate(-50%, -50%)',
+                        width: cursors.left.isActive ? 40 : 30,
+                        height: cursors.left.isActive ? 40 : 30,
+                        borderRadius: '50%',
+                        border: `3px solid ${cursors.left.isActive ? '#FF6B6B' : '#FF6B6B80'}`,
+                        backgroundColor: cursors.left.isActive ? 'rgba(255, 107, 107, 0.3)' : 'transparent',
+                        transition: 'all 0.1s ease-out',
+                        boxShadow: cursors.left.isActive 
+                            ? '0 0 20px rgba(255, 107, 107, 0.5), inset 0 0 15px rgba(255, 107, 107, 0.3)' 
+                            : 'none',
+                        '&::after': {
+                            content: '"L"',
+                            position: 'absolute',
+                            top: '50%',
+                            left: '50%',
+                            transform: 'translate(-50%, -50%)',
+                            color: '#FF6B6B',
+                            fontSize: '12px',
+                            fontWeight: 'bold'
+                        }
+                    }}
+                />
+            )}
+            {cursors.right && (
+                <Box
+                    sx={{
+                        position: 'absolute',
+                        left: `${cursors.right.x * 100}%`,
+                        top: `${cursors.right.y * 100}%`,
+                        transform: 'translate(-50%, -50%)',
+                        width: cursors.right.isActive ? 40 : 30,
+                        height: cursors.right.isActive ? 40 : 30,
+                        borderRadius: '50%',
+                        border: `3px solid ${cursors.right.isActive ? '#4ECDC4' : '#4ECDC480'}`,
+                        backgroundColor: cursors.right.isActive ? 'rgba(78, 205, 196, 0.3)' : 'transparent',
+                        transition: 'all 0.1s ease-out',
+                        boxShadow: cursors.right.isActive 
+                            ? '0 0 20px rgba(78, 205, 196, 0.5), inset 0 0 15px rgba(78, 205, 196, 0.3)' 
+                            : 'none',
+                        '&::after': {
+                            content: '"R"',
+                            position: 'absolute',
+                            top: '50%',
+                            left: '50%',
+                            transform: 'translate(-50%, -50%)',
+                            color: '#4ECDC4',
+                            fontSize: '12px',
+                            fontWeight: 'bold'
+                        }
+                    }}
+                />
+            )}
         </Box>
     );
 };
+
+GraphDisplay.displayName = 'GraphDisplay';
 
 export default GraphDisplay;

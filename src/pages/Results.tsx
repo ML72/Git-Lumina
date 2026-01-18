@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { 
   Box, 
   Typography, 
@@ -14,7 +14,10 @@ import {
   Stack,
   Avatar,
   useTheme,
-  alpha
+  alpha,
+  Fab,
+  Tooltip,
+  Collapse
 } from '@mui/material';
 import { 
   Send as SendIcon, 
@@ -22,10 +25,17 @@ import {
   Person as PersonIcon,
   Description as FileIcon, 
   Code as CodeIcon,
-  Info as InfoIcon
+  Info as InfoIcon,
+  Videocam as VideocamIcon,
+  VideocamOff as VideocamOffIcon,
+  Visibility as VisibilityIcon,
+  VisibilityOff as VisibilityOffIcon,
+  CenterFocusStrong as ResetIcon
 } from '@mui/icons-material';
 import CustomPage from '../components/CustomPage';
-import GraphDisplay from '../components/GraphDisplay';
+import GraphDisplay, { GraphDisplayRef } from '../components/GraphDisplay';
+import Webcam, { GestureState } from '../components/Webcam';
+import useGestureControls, { GestureControlState } from '../hooks/useGestureControls';
 
 // Mock Data
 const MOCK_CHAT = [
@@ -48,6 +58,80 @@ const MOCK_INFO = {
 const Results: React.FC = () => {
   const theme = useTheme();
   const [query, setQuery] = useState('');
+  const [webcamEnabled, setWebcamEnabled] = useState(true);
+  const [webcamVisible, setWebcamVisible] = useState(true);
+  const [cursors, setCursors] = useState<GestureControlState['cursors']>({
+    left: null,
+    right: null
+  });
+  const [gestureMode, setGestureMode] = useState<'idle' | 'one-hand-pan' | 'two-hand-zoom'>('idle');
+  const [activeHandCount, setActiveHandCount] = useState(0);
+  
+  const graphDisplayRef = useRef<GraphDisplayRef>(null);
+  const { processGesture } = useGestureControls();
+  
+  // Timer ref for auto-reset when no hands detected
+  const noHandsTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const hadHandsRef = useRef(false);
+  
+  // Auto-reset timeout duration (5 seconds)
+  const AUTO_RESET_DELAY = 5000;
+  
+  // Handle gesture updates from webcam
+  const handleGestureUpdate = useCallback((gestureState: GestureState) => {
+    const controlState = processGesture(gestureState);
+    
+    // Update cursors for visualization
+    setCursors(controlState.cursors);
+    
+    // Update mode for display
+    setGestureMode(controlState.mode);
+    setActiveHandCount(controlState.activeHandCount);
+    
+    // Check if any hands are currently detected (regardless of open/closed state)
+    const handsDetected = gestureState.leftHand !== null || gestureState.rightHand !== null;
+    
+    if (handsDetected) {
+      // Hands detected - clear any pending reset timer
+      if (noHandsTimerRef.current) {
+        clearTimeout(noHandsTimerRef.current);
+        noHandsTimerRef.current = null;
+      }
+      hadHandsRef.current = true;
+    } else if (hadHandsRef.current && !noHandsTimerRef.current) {
+      // No hands detected and we previously had hands - start reset timer
+      console.log('[Results] No hands detected - starting 5 second reset timer');
+      noHandsTimerRef.current = setTimeout(() => {
+        console.log('[Results] 5 seconds without hands - resetting view');
+        if (graphDisplayRef.current) {
+          graphDisplayRef.current.resetView();
+        }
+        noHandsTimerRef.current = null;
+        hadHandsRef.current = false;
+      }, AUTO_RESET_DELAY);
+    }
+    
+    // Apply controls to graph
+    if (graphDisplayRef.current) {
+      graphDisplayRef.current.applyGestureControl(controlState);
+    }
+  }, [processGesture]);
+  
+  // Cleanup timer on unmount
+  useEffect(() => {
+    return () => {
+      if (noHandsTimerRef.current) {
+        clearTimeout(noHandsTimerRef.current);
+      }
+    };
+  }, []);
+  
+  // Reset graph view
+  const handleResetView = useCallback(() => {
+    if (graphDisplayRef.current) {
+      graphDisplayRef.current.resetView();
+    }
+  }, []);
 
   return (
     <CustomPage>
@@ -189,12 +273,202 @@ const Results: React.FC = () => {
 
         {/* Right Panel - Graph Display */}
         <Box sx={{ flex: 1, position: 'relative', height: '100%' }}>
-          <GraphDisplay />
+          <GraphDisplay 
+            ref={graphDisplayRef}
+            isGestureActive={webcamEnabled && activeHandCount > 0}
+          />
           
-          {/* Floating Controls Example (Like Google Maps) */}
-          <Box sx={{ position: 'absolute', top: 20, right: 20, zIndex: 100 }}>
-            {/* We could add zoom buttons or layer toggles here later */}
+          {/* Webcam Preview (Picture-in-Picture style) - Always visible in bottom right */}
+          <Collapse in={webcamVisible}>
+            <Box 
+              sx={{ 
+                position: 'absolute', 
+                bottom: 100, 
+                right: 20, 
+                width: 320,
+                height: 240,
+                borderRadius: 2,
+                overflow: 'hidden',
+                boxShadow: '0 8px 32px rgba(0,0,0,0.4)',
+                border: `2px solid ${webcamEnabled ? 'rgba(78, 205, 196, 0.5)' : 'rgba(255,255,255,0.1)'}`,
+                zIndex: 100,
+                transition: 'border-color 0.3s ease'
+              }}
+            >
+              <Webcam 
+                onGestureUpdate={webcamEnabled ? handleGestureUpdate : () => {}}
+                showVideo={true}
+                showOverlay={true}
+              />
+              {/* Gesture control status indicator */}
+              <Box
+                sx={{
+                  position: 'absolute',
+                  top: 8,
+                  right: 8,
+                  bgcolor: webcamEnabled ? 'rgba(78, 205, 196, 0.9)' : 'rgba(100, 100, 100, 0.9)',
+                  color: '#fff',
+                  px: 1,
+                  py: 0.5,
+                  borderRadius: 1,
+                  fontSize: '10px',
+                  fontWeight: 'bold',
+                  textTransform: 'uppercase'
+                }}
+              >
+                {webcamEnabled ? '● Controls Active' : '○ Controls Off'}
+              </Box>
+            </Box>
+          </Collapse>
+          
+          {/* Floating Controls */}
+          <Box sx={{ 
+            position: 'absolute', 
+            bottom: 20, 
+            right: 20, 
+            zIndex: 100,
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 1
+          }}>
+            {/* Toggle webcam visibility */}
+            <Tooltip title={webcamVisible ? "Hide webcam preview" : "Show webcam preview"} placement="left">
+              <Fab 
+                size="small" 
+                color="default"
+                onClick={() => setWebcamVisible(!webcamVisible)}
+                sx={{ 
+                  bgcolor: 'background.paper',
+                  '&:hover': { bgcolor: alpha(theme.palette.primary.main, 0.1) }
+                }}
+              >
+                {webcamVisible ? <VisibilityOffIcon /> : <VisibilityIcon />}
+              </Fab>
+            </Tooltip>
+            
+            {/* Reset view button */}
+            <Tooltip title="Reset view" placement="left">
+              <Fab 
+                size="small" 
+                color="default"
+                onClick={handleResetView}
+                sx={{ 
+                  bgcolor: 'background.paper',
+                  '&:hover': { bgcolor: alpha(theme.palette.primary.main, 0.1) }
+                }}
+              >
+                <ResetIcon />
+              </Fab>
+            </Tooltip>
+            
+            {/* Toggle webcam on/off */}
+            <Tooltip title={webcamEnabled ? "Disable gesture controls" : "Enable gesture controls"} placement="left">
+              <Fab 
+                color={webcamEnabled ? "primary" : "default"}
+                onClick={() => setWebcamEnabled(!webcamEnabled)}
+                sx={{ 
+                  bgcolor: webcamEnabled ? theme.palette.primary.main : 'background.paper',
+                  '&:hover': { 
+                    bgcolor: webcamEnabled 
+                      ? theme.palette.primary.dark 
+                      : alpha(theme.palette.primary.main, 0.1) 
+                  }
+                }}
+              >
+                {webcamEnabled ? <VideocamIcon /> : <VideocamOffIcon />}
+              </Fab>
+            </Tooltip>
           </Box>
+          
+          {/* Gesture Control Instructions (shown when webcam is visible and controls are enabled) */}
+          {webcamVisible && webcamEnabled && (
+            <Box 
+              sx={{ 
+                position: 'absolute', 
+                top: 20, 
+                left: 20, 
+                zIndex: 100,
+                bgcolor: alpha(theme.palette.background.paper, 0.9),
+                borderRadius: 2,
+                p: 2,
+                maxWidth: 280,
+                boxShadow: '0 4px 20px rgba(0,0,0,0.2)'
+              }}
+            >
+              <Typography variant="subtitle2" fontWeight="bold" gutterBottom>
+                🖐️ Gesture Controls
+              </Typography>
+              <Typography variant="caption" component="div" color="text.secondary">
+                <Box component="ul" sx={{ m: 0, pl: 2 }}>
+                  <li><strong>Close one hand:</strong> Rotate/Pan the graph</li>
+                  <li><strong>Close both hands:</strong> Pinch to zoom + pan</li>
+                  <li><strong>Open hands:</strong> Release control</li>
+                </Box>
+              </Typography>
+              <Divider sx={{ my: 1 }} />
+              <Typography variant="caption" color="text.secondary">
+                Your arm span calibrates sensitivity automatically.
+              </Typography>
+            </Box>
+          )}
+          
+          {/* Active Mode Indicator - Large visual feedback */}
+          {webcamEnabled && (
+            <Box
+              sx={{
+                position: 'absolute',
+                top: 20,
+                left: '50%',
+                transform: 'translateX(-50%)',
+                zIndex: 100,
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                gap: 1
+              }}
+            >
+              {/* Mode Badge */}
+              <Box
+                sx={{
+                  px: 3,
+                  py: 1.5,
+                  borderRadius: 3,
+                  bgcolor: gestureMode === 'idle' 
+                    ? 'rgba(100, 100, 100, 0.9)' 
+                    : gestureMode === 'one-hand-pan' 
+                      ? 'rgba(255, 107, 107, 0.9)' 
+                      : 'rgba(78, 205, 196, 0.9)',
+                  color: '#fff',
+                  fontWeight: 'bold',
+                  fontSize: '1.1rem',
+                  boxShadow: gestureMode !== 'idle' ? '0 0 20px rgba(255,255,255,0.3)' : 'none',
+                  transition: 'all 0.2s ease',
+                  textTransform: 'uppercase',
+                  letterSpacing: 1
+                }}
+              >
+                {gestureMode === 'idle' && '👐 HANDS OPEN'}
+                {gestureMode === 'one-hand-pan' && '✊ PAN MODE'}
+                {gestureMode === 'two-hand-zoom' && '🤏 ZOOM MODE'}
+              </Box>
+              
+              {/* Hand count indicator */}
+              <Typography 
+                variant="caption" 
+                sx={{ 
+                  color: '#fff', 
+                  bgcolor: 'rgba(0,0,0,0.6)', 
+                  px: 2, 
+                  py: 0.5, 
+                  borderRadius: 1 
+                }}
+              >
+                Active hands: {activeHandCount} | 
+                L: {cursors.left ? (cursors.left.isActive ? '✊ CLOSED' : '✋ OPEN') : '❌'} | 
+                R: {cursors.right ? (cursors.right.isActive ? '✊ CLOSED' : '✋ OPEN') : '❌'}
+              </Typography>
+            </Box>
+          )}
         </Box>
 
       </Box>
