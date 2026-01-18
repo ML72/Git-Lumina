@@ -4,6 +4,8 @@ import { GestureState, HandData } from '../components/Webcam';
 export interface GestureControlState {
     // Pan delta in normalized coordinates (-1 to 1)
     panDelta: { x: number; y: number };
+    // Rotate delta in normalized coordinates (for left hand control)
+    rotateDelta: { x: number; y: number };
     // Zoom delta (positive = zoom in, negative = zoom out)
     zoomDelta: number;
     // Whether any hand is actively "clicking" (closed)
@@ -16,7 +18,7 @@ export interface GestureControlState {
         right: { x: number; y: number; isActive: boolean } | null;
     };
     // Debug info
-    mode: 'idle' | 'one-hand-pan' | 'two-hand-zoom';
+    mode: 'idle' | 'left-hand-rotate' | 'right-hand-pan' | 'two-hand-zoom';
 }
 
 interface SmoothedPosition {
@@ -37,11 +39,13 @@ interface PreviousState {
     smoothedCenterPoint: SmoothedPosition | null;
     // Smoothed output deltas
     smoothedPanDelta: { x: number; y: number };
+    smoothedRotateDelta: { x: number; y: number };
     smoothedZoomDelta: number;
 }
 
 // Sensitivity multipliers
 const PAN_SENSITIVITY = 10;
+const ROTATE_SENSITIVITY = 5;  // For left hand rotation
 const ZOOM_SENSITIVITY = 45;
 
 // Smoothing factors (0 = no smoothing/instant, 1 = infinite smoothing/no movement)
@@ -89,11 +93,13 @@ export const useGestureControls = () => {
         smoothedDistance: null,
         smoothedCenterPoint: null,
         smoothedPanDelta: { x: 0, y: 0 },
+        smoothedRotateDelta: { x: 0, y: 0 },
         smoothedZoomDelta: 0
     });
     
     const controlStateRef = useRef<GestureControlState>({
         panDelta: { x: 0, y: 0 },
+        rotateDelta: { x: 0, y: 0 },
         zoomDelta: 0,
         isActive: false,
         activeHandCount: 0,
@@ -159,8 +165,9 @@ export const useGestureControls = () => {
         };
         
         let rawPanDelta = { x: 0, y: 0 };
+        let rawRotateDelta = { x: 0, y: 0 };
         let rawZoomDelta = 0;
-        let mode: 'idle' | 'one-hand-pan' | 'two-hand-zoom' = 'idle';
+        let mode: 'idle' | 'left-hand-rotate' | 'right-hand-pan' | 'two-hand-zoom' = 'idle';
         
         // Debug log every 60 frames (reduced frequency)
         const shouldLog = frameCountRef.current % 60 === 0;
@@ -217,9 +224,9 @@ export const useGestureControls = () => {
             prev.leftHand = { ...smoothedLeftPos };
             prev.rightHand = { ...smoothedRightPos };
         }
-        // ONE-HAND MODE: Single hand closed - pan only
-        else if (activeHandCount === 1) {
-            mode = 'one-hand-pan';
+        // ONE-HAND MODE: Left hand closed - rotate
+        else if (activeHandCount === 1 && leftActive) {
+            mode = 'left-hand-rotate';
             
             // Reset two-hand state
             prev.distance = null;
@@ -228,13 +235,38 @@ export const useGestureControls = () => {
             prev.smoothedCenterPoint = null;
             prev.wasInTwoHandMode = false;
             
-            const activeSmoothedPos = leftActive ? smoothedLeftPos : smoothedRightPos;
-            const prevHandPos = leftActive ? prev.leftHand : prev.rightHand;
+            if (smoothedLeftPos && prev.leftHand) {
+                // Calculate rotate delta based on left hand movement
+                const dx = applyDeadzone(smoothedLeftPos.x - prev.leftHand.x, DEADZONE);
+                const dy = applyDeadzone(smoothedLeftPos.y - prev.leftHand.y, DEADZONE);
+                
+                rawRotateDelta = {
+                    x: dx * sensitivityScale * ROTATE_SENSITIVITY,
+                    y: dy * sensitivityScale * ROTATE_SENSITIVITY
+                };
+            }
             
-            if (activeSmoothedPos && prevHandPos) {
-                // Calculate pan delta based on smoothed hand movement
-                const dx = applyDeadzone(activeSmoothedPos.x - prevHandPos.x, DEADZONE);
-                const dy = applyDeadzone(activeSmoothedPos.y - prevHandPos.y, DEADZONE);
+            // Update left hand position
+            if (smoothedLeftPos) {
+                prev.leftHand = { ...smoothedLeftPos };
+            }
+            prev.rightHand = null;
+        }
+        // ONE-HAND MODE: Right hand closed - pan only
+        else if (activeHandCount === 1 && rightActive) {
+            mode = 'right-hand-pan';
+            
+            // Reset two-hand state
+            prev.distance = null;
+            prev.smoothedDistance = null;
+            prev.centerPoint = null;
+            prev.smoothedCenterPoint = null;
+            prev.wasInTwoHandMode = false;
+            
+            if (smoothedRightPos && prev.rightHand) {
+                // Calculate pan delta based on right hand movement
+                const dx = applyDeadzone(smoothedRightPos.x - prev.rightHand.x, DEADZONE);
+                const dy = applyDeadzone(smoothedRightPos.y - prev.rightHand.y, DEADZONE);
                 
                 rawPanDelta = {
                     x: dx * sensitivityScale * PAN_SENSITIVITY,
@@ -242,13 +274,10 @@ export const useGestureControls = () => {
                 };
             }
             
-            // Update the active hand's previous position
-            if (leftActive && smoothedLeftPos) {
-                prev.leftHand = { ...smoothedLeftPos };
-                prev.rightHand = null;
-            } else if (rightActive && smoothedRightPos) {
+            // Update right hand position
+            prev.leftHand = null;
+            if (smoothedRightPos) {
                 prev.rightHand = { ...smoothedRightPos };
-                prev.leftHand = null;
             }
         }
         // IDLE MODE: No hands closed
@@ -265,11 +294,13 @@ export const useGestureControls = () => {
             prev.wasInTwoHandMode = false;
             // Reset smoothed output when idle
             prev.smoothedPanDelta = { x: 0, y: 0 };
+            prev.smoothedRotateDelta = { x: 0, y: 0 };
             prev.smoothedZoomDelta = 0;
         }
         
         // Apply output smoothing to the deltas
         let finalPanDelta: { x: number; y: number };
+        let finalRotateDelta: { x: number; y: number };
         let finalZoomDelta: number;
         
         if (mode !== 'idle') {
@@ -277,12 +308,18 @@ export const useGestureControls = () => {
                 x: smooth(rawPanDelta.x, prev.smoothedPanDelta.x, OUTPUT_SMOOTHING),
                 y: smooth(rawPanDelta.y, prev.smoothedPanDelta.y, OUTPUT_SMOOTHING)
             };
+            finalRotateDelta = {
+                x: smooth(rawRotateDelta.x, prev.smoothedRotateDelta.x, OUTPUT_SMOOTHING),
+                y: smooth(rawRotateDelta.y, prev.smoothedRotateDelta.y, OUTPUT_SMOOTHING)
+            };
             finalZoomDelta = smooth(rawZoomDelta, prev.smoothedZoomDelta, OUTPUT_SMOOTHING);
             
             prev.smoothedPanDelta = finalPanDelta;
+            prev.smoothedRotateDelta = finalRotateDelta;
             prev.smoothedZoomDelta = finalZoomDelta;
         } else {
             finalPanDelta = { x: 0, y: 0 };
+            finalRotateDelta = { x: 0, y: 0 };
             finalZoomDelta = 0;
         }
         
@@ -290,6 +327,8 @@ export const useGestureControls = () => {
             console.log(`[GestureControls] ${mode}:`, {
                 rawPan: rawPanDelta,
                 smoothedPan: finalPanDelta,
+                rawRotate: rawRotateDelta,
+                smoothedRotate: finalRotateDelta,
                 rawZoom: rawZoomDelta.toFixed(4),
                 smoothedZoom: finalZoomDelta.toFixed(4)
             });
@@ -297,6 +336,7 @@ export const useGestureControls = () => {
         
         controlStateRef.current = {
             panDelta: finalPanDelta,
+            rotateDelta: finalRotateDelta,
             zoomDelta: finalZoomDelta,
             isActive: activeHandCount > 0,
             activeHandCount,
@@ -320,10 +360,12 @@ export const useGestureControls = () => {
             smoothedDistance: null,
             smoothedCenterPoint: null,
             smoothedPanDelta: { x: 0, y: 0 },
+            smoothedRotateDelta: { x: 0, y: 0 },
             smoothedZoomDelta: 0
         };
         controlStateRef.current = {
             panDelta: { x: 0, y: 0 },
+            rotateDelta: { x: 0, y: 0 },
             zoomDelta: 0,
             isActive: false,
             activeHandCount: 0,

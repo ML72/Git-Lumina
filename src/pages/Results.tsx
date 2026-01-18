@@ -85,7 +85,7 @@ const Results: React.FC = () => {
     left: null,
     right: null
   });
-  const [gestureMode, setGestureMode] = useState<'idle' | 'one-hand-pan' | 'two-hand-zoom'>('idle');
+  const [gestureMode, setGestureMode] = useState<'idle' | 'left-hand-rotate' | 'right-hand-pan' | 'two-hand-zoom'>('idle');
   const [activeHandCount, setActiveHandCount] = useState(0);
   
   const graphDisplayRef = useRef<GraphDisplayRef>(null);
@@ -776,96 +776,6 @@ const Results: React.FC = () => {
             </Box>
           </Collapse>
           
-          {/* Floating Controls */}
-          <Box sx={{ 
-            position: 'absolute', 
-            bottom: 20, 
-            right: 20, 
-            zIndex: 100,
-            display: 'flex',
-            flexDirection: 'column',
-            gap: 1
-          }}>
-            {/* Toggle webcam visibility */}
-            <Tooltip title={webcamVisible ? "Hide webcam preview" : "Show webcam preview"} placement="left">
-              <Fab 
-                size="small" 
-                color="default"
-                onClick={() => setWebcamVisible(!webcamVisible)}
-                sx={{ 
-                  bgcolor: 'background.paper',
-                  '&:hover': { bgcolor: alpha(theme.palette.primary.main, 0.1) }
-                }}
-              >
-                {webcamVisible ? <VisibilityOffIcon /> : <VisibilityIcon />}
-              </Fab>
-            </Tooltip>
-            
-            {/* Reset view button */}
-            <Tooltip title="Reset view" placement="left">
-              <Fab 
-                size="small" 
-                color="default"
-                onClick={handleResetView}
-                sx={{ 
-                  bgcolor: 'background.paper',
-                  '&:hover': { bgcolor: alpha(theme.palette.primary.main, 0.1) }
-                }}
-              >
-                <ResetIcon />
-              </Fab>
-            </Tooltip>
-            
-            {/* Toggle webcam on/off */}
-            <Tooltip title={webcamEnabled ? "Disable gesture controls" : "Enable gesture controls"} placement="left">
-              <Fab 
-                color={webcamEnabled ? "primary" : "default"}
-                onClick={() => setWebcamEnabled(!webcamEnabled)}
-                sx={{ 
-                  bgcolor: webcamEnabled ? theme.palette.primary.main : 'background.paper',
-                  '&:hover': { 
-                    bgcolor: webcamEnabled 
-                      ? theme.palette.primary.dark 
-                      : alpha(theme.palette.primary.main, 0.1) 
-                  }
-                }}
-              >
-                {webcamEnabled ? <VideocamIcon /> : <VideocamOffIcon />}
-              </Fab>
-            </Tooltip>
-          </Box>
-          
-          {/* Gesture Control Instructions (shown when webcam is visible and controls are enabled) */}
-          {webcamVisible && webcamEnabled && (
-            <Box 
-              sx={{ 
-                position: 'absolute', 
-                top: 20, 
-                left: 20, 
-                zIndex: 100,
-                bgcolor: alpha(theme.palette.background.paper, 0.9),
-                borderRadius: 2,
-                p: 2,
-                maxWidth: 280,
-                boxShadow: '0 4px 20px rgba(0,0,0,0.2)'
-              }}
-            >
-              <Typography variant="subtitle2" fontWeight="bold" gutterBottom>
-                🖐️ Gesture Controls
-              </Typography>
-              <Typography variant="caption" component="div" color="text.secondary">
-                <Box component="ul" sx={{ m: 0, pl: 2 }}>
-                  <li><strong>Close one hand:</strong> Rotate/Pan the graph</li>
-                  <li><strong>Close both hands:</strong> Pinch to zoom + pan</li>
-                  <li><strong>Open hands:</strong> Release control</li>
-                </Box>
-              </Typography>
-              <Divider sx={{ my: 1 }} />
-              <Typography variant="caption" color="text.secondary">
-                Your arm span calibrates sensitivity automatically.
-              </Typography>
-            </Box>
-          )}
           
           {/* Active Mode Indicator - Large visual feedback */}
           {webcamEnabled && (
@@ -890,9 +800,11 @@ const Results: React.FC = () => {
                   borderRadius: 3,
                   bgcolor: gestureMode === 'idle' 
                     ? 'rgba(100, 100, 100, 0.9)' 
-                    : gestureMode === 'one-hand-pan' 
-                      ? 'rgba(255, 107, 107, 0.9)' 
-                      : 'rgba(78, 205, 196, 0.9)',
+                    : gestureMode === 'left-hand-rotate' 
+                      ? 'rgba(255, 193, 7, 0.9)'  // Yellow for rotate
+                      : gestureMode === 'right-hand-pan'
+                        ? 'rgba(255, 107, 107, 0.9)'  // Red for pan
+                        : 'rgba(78, 205, 196, 0.9)',  // Teal for zoom
                   color: '#fff',
                   fontWeight: 'bold',
                   fontSize: '1.1rem',
@@ -903,7 +815,8 @@ const Results: React.FC = () => {
                 }}
               >
                 {gestureMode === 'idle' && '👐 HANDS OPEN'}
-                {gestureMode === 'one-hand-pan' && '✊ PAN MODE'}
+                {gestureMode === 'left-hand-rotate' && '🔄 ROTATE MODE'}
+                {gestureMode === 'right-hand-pan' && '✊ PAN MODE'}
                 {gestureMode === 'two-hand-zoom' && '🤏 ZOOM MODE'}
               </Box>
               
