@@ -26,11 +26,9 @@ export const generateAndStoreGraph = async (
         }
 
         console.log("Graph constructed, dispatching to store...");
+        const cleanName = file.name.replace(/\.[^/.]+$/, "");
         dispatch(setGraph(graph));
-        dispatch(setName(file.name));
-        
-        // Dispatch basic metadata to store regardless
-        dispatch(setName(file.name));
+        dispatch(setName(cleanName));
 
         const isLargeGraph = graph.nodes.length > LARGE_GRAPH_THRESHOLD;
 

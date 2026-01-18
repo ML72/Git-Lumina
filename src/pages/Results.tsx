@@ -62,6 +62,26 @@ const CATEGORY_COLORS = [
     '#F7DC6F', '#BB8FCE', '#F1948A', '#85C1E9', '#82E0AA'
 ];
 
+const LANGUAGE_DISPLAY_NAMES: Record<string, string> = {
+    'javascript': 'JavaScript',
+    'typescript': 'TypeScript',
+    'python': 'Python',
+    'java': 'Java',
+    'c': 'C',
+    'cpp': 'C++',
+    'json': 'JSON',
+    'markdown': 'Markdown',
+    'css': 'CSS',
+    'html': 'HTML',
+    'yaml': 'YAML',
+    'text': 'Text',
+    'go': 'Go',
+    'rust': 'Rust',
+    'php': 'PHP',
+    'ruby': 'Ruby',
+    'Other': 'Other'
+};
+
 // Mock Data
 const MOCK_CHAT = [
   { id: 1, sender: 'system', text: 'Hello! I am Cortex, acts as your AI assistant for this codebase. Ask me anything about the structure, dependencies, or specific files.' },
@@ -140,7 +160,7 @@ const Results: React.FC = () => {
   const AUTO_RESET_DELAY = 2000;
   
   // Section toggle state
-  const [activeSection, setActiveSection] = useState<string>('insights');
+  const [activeSection, setActiveSection] = useState<string>('repository');
   
   // Compute category statistics
   const categoryStats = React.useMemo(() => {
@@ -177,7 +197,9 @@ const Results: React.FC = () => {
     let calculatedTotalLoc = 0;
 
     displayGraph.nodes.forEach((node: any) => {
-      const lang = getLanguageFromExtension(node.filepath);
+      const rawLang = getLanguageFromExtension(node.filepath);
+      const lang = LANGUAGE_DISPLAY_NAMES[rawLang] || rawLang.charAt(0).toUpperCase() + rawLang.slice(1);
+      
       const loc = node.num_lines || 0;
       stats[lang] = (stats[lang] || 0) + loc;
       calculatedTotalLoc += loc;
@@ -185,11 +207,15 @@ const Results: React.FC = () => {
 
     return Object.entries(stats)
       .map(([lang, lines]) => ({
-        language: lang.charAt(0).toUpperCase() + lang.slice(1),
+        language: lang,
         lines,
         percentage: calculatedTotalLoc > 0 ? (lines / calculatedTotalLoc) * 100 : 0
       }))
-      .sort((a, b) => b.lines - a.lines);
+      .sort((a, b) => {
+          if (a.language === 'Other') return 1;
+          if (b.language === 'Other') return -1;
+          return b.lines - a.lines;
+      });
   }, [displayGraph]);
 
   // Quest data and state
@@ -419,29 +445,29 @@ const Results: React.FC = () => {
   }, []);
 
   const handleSuggestedQuestion = (text: string) => {
-      setChat(prev => [...prev, { id: Date.now(), sender: 'user', text }]);
-      // Simulate response for better UX
-      setTimeout(() => {
-          setChat(prev => [...prev, { id: Date.now() + 1, sender: 'system', text: `Analyzing ${text.toLowerCase()}... (Simulation)` }]);
-      }, 800);
-      setQuery('');
+    setChat(prev => [...prev, { id: Date.now(), sender: 'user', text }]);
+    // Simulate response for better UX
+    setTimeout(() => {
+        setChat(prev => [...prev, { id: Date.now() + 1, sender: 'system', text: `Analyzing ${text.toLowerCase()}... (Simulation)` }]);
+    }, 800);
+    setQuery('');
   };
 
-  const handleSectionToggle = (section: 'insights' | 'quests' | 'cortex' | 'categories') => {
+  const handleSectionToggle = (section: 'repository' | 'quests' | 'cortex' | 'categories') => {
       // Always reset view and dismiss hints when toggling sections
       if (graphDisplayRef.current) {
         graphDisplayRef.current.resetView();
       }
       setActiveHint(null);
 
-      if (activeSection === section) {
-        setActiveSection('');
-      } else {
-        setActiveSection(section);
-        if (!isSidebarOpen) {
-            setIsSidebarOpen(true);
-        }
+    if (activeSection === section) {
+      setActiveSection('');
+    } else {
+      setActiveSection(section);
+      if (!isSidebarOpen) {
+          setIsSidebarOpen(true);
       }
+    }
   };
 
   // Resize Handlers
@@ -449,12 +475,12 @@ const Results: React.FC = () => {
   const stopResizing = useCallback(() => setIsResizing(false), []);
   
   const resize = useCallback((mouseMoveEvent: MouseEvent) => {
-      if (isResizing) {
-          const newWidth = mouseMoveEvent.clientX;
-          if (newWidth > 260 && newWidth < 600) {
-              setSidebarWidth(newWidth);
-          }
-      }
+    if (isResizing) {
+        const newWidth = mouseMoveEvent.clientX;
+        if (newWidth > 260 && newWidth < 600) {
+            setSidebarWidth(newWidth);
+        }
+    }
   }, [isResizing]);
 
   useEffect(() => {
@@ -526,7 +552,7 @@ const Results: React.FC = () => {
                     flex: 1, 
                     display: 'flex', 
                     flexDirection: 'column', 
-                    overflowY: 'auto',
+                    overflowY: activeSection === 'cortex' ? 'hidden' : 'auto',
                     minWidth: sidebarWidth, 
                     position: 'relative',
                     zIndex: 1,
@@ -534,22 +560,23 @@ const Results: React.FC = () => {
                     scrollbarWidth: 'none',
                 }}>
                     
-                    {/* 2. Repository Insight Section */}
+                    {/* 2. Repository Section */}
+                    {graph && (
                     <Box sx={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
                         <Box 
                             sx={{ p: 2, display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer', '&:hover': { bgcolor: 'rgba(255,255,255,0.03)' } }}
-                            onClick={() => handleSectionToggle('insights')}
+                            onClick={() => handleSectionToggle('repository')}
                         >
                             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                                <PlayArrowIcon fontSize="small" sx={{ color: activeSection === 'insights' ? '#79c0ff' : 'rgba(255,255,255,0.5)' }} />
-                                <Typography variant="subtitle2" fontWeight="bold" sx={{ color: activeSection === 'insights' ? '#79c0ff' : 'rgba(255,255,255,0.7)', letterSpacing: '0.5px' }}>
-                                    REPOSITORY INSIGHTS
+                                <PlayArrowIcon fontSize="small" sx={{ color: activeSection === 'repository' ? '#79c0ff' : 'rgba(255,255,255,0.5)' }} />
+                                <Typography variant="subtitle2" fontWeight="bold" sx={{ color: activeSection === 'repository' ? '#79c0ff' : 'rgba(255,255,255,0.7)', letterSpacing: '0.5px' }}>
+                                    REPOSITORY
                                 </Typography>
                             </Box>
-                            {activeSection === 'insights' ? <ExpandLess fontSize="small" sx={{ color: 'rgba(255,255,255,0.5)' }} /> : <ExpandMore fontSize="small" sx={{ color: 'rgba(255,255,255,0.5)' }} />}
+                            {activeSection === 'repository' ? <ExpandLess fontSize="small" sx={{ color: 'rgba(255,255,255,0.5)' }} /> : <ExpandMore fontSize="small" sx={{ color: 'rgba(255,255,255,0.5)' }} />}
                         </Box>
                         
-                        <Collapse in={activeSection === 'insights'}>
+                        <Collapse in={activeSection === 'repository'}>
                             <Box sx={{ px: 2, pb: 2 }}>
                                 <Typography variant="body2" paragraph sx={{ whiteSpace: 'normal', color: 'rgba(255,255,255,0.7)', mb: 2 }}>
                                     {displayGraph?.nodes ? `${displayGraph.nodes.length} files analyzed across ${displayGraph.categories.length} categories.` : "Analyzing repository structure..."}
@@ -597,52 +624,68 @@ const Results: React.FC = () => {
                                 )}
                                 
                                 <Typography variant="overline" sx={{ color: 'text.secondary', fontWeight: 600, display: 'block', mb: 1 }}>
-                                    TOP CATEGORIES
+                                    CODE ORGANIZATION
                                 </Typography>
                                 
-                                <List dense sx={{ mt: 1, p: 0 }}>
+                                <List disablePadding sx={{ pb: 1 }}>
                                     {categoryStats.slice(0, 5).map((stat: any, i: number) => {
-                                        const colorIndex = displayGraph?.categories.indexOf(stat.name) ?? i;
-                                        const color = CATEGORY_COLORS[colorIndex % CATEGORY_COLORS.length];
+                                        const idx = displayGraph?.categories.indexOf(stat.name) ?? -1;
+                                        if (idx === -1) return null;
+
+                                        const color = CATEGORY_COLORS[idx % CATEGORY_COLORS.length];
+                                        const isOpen = expandedCategories[idx];
+                                        
+                                        // Optimization: filter files only if open
+                                        const files = isOpen && displayGraph ? displayGraph.nodes.filter((n: any) => n.category === idx) : [];
                                         return (
-                                            <ListItem key={stat.name} sx={{ 
-                                                py: 0.5, 
-                                                px: 1,
-                                                mb: 0.5,
-                                                borderRadius: 1, 
-                                                bgcolor: alpha(color, 0.1),
-                                                border: `1px solid ${alpha(color, 0.2)}`
-                                            }}>
-                                                <ListItemText 
-                                                    primary={
-                                                        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                                            <Typography variant="body2" sx={{ fontWeight: 600, color: color }}>
-                                                                {stat.name}
-                                                            </Typography>
-                                                            <Typography variant="caption" sx={{ color: 'rgba(255,255,255,0.7)', fontWeight: 500 }}>
-                                                                {stat.files} files
-                                                            </Typography>
-                                                        </Box>
-                                                    }
-                                                    secondary={
-                                                        <Box sx={{ display: 'flex', justifyContent: 'space-between', width: '100%' }}>
-                                                            <Typography variant="caption" sx={{ color: 'rgba(255,255,255,0.4)', fontSize: '0.7rem' }}>
-                                                                Total lines
-                                                            </Typography>
-                                                            <Typography variant="caption" sx={{ color: 'rgba(255,255,255,0.4)', fontSize: '0.7rem' }}>
-                                                                {(stat.lines).toLocaleString()}
-                                                            </Typography>
-                                                        </Box>
-                                                    }
-                                                    secondaryTypographyProps={{ component: 'div' }}
-                                                />
-                                            </ListItem>
+                                            <React.Fragment key={stat.name}>
+                                                <ListItemButton 
+                                                    onClick={() => toggleCategory(idx)}
+                                                    sx={{ py: 1, px: 2, my: 0.5, borderRadius: 1, '&:hover': { bgcolor: 'rgba(255,255,255,0.05)' } }}
+                                                >
+                                                    <ListItemIcon sx={{ minWidth: 32 }}>
+                                                        <FolderIcon sx={{ color: color, fontSize: 20 }} />
+                                                    </ListItemIcon>
+                                                    <ListItemText 
+                                                        primary={stat.name} 
+                                                        primaryTypographyProps={{ variant: 'body2', color: 'rgba(255,255,255,0.9)' }}
+                                                        secondary={`${stat.files} files • ${(stat.lines).toLocaleString()} lines`}
+                                                        secondaryTypographyProps={{ variant: 'caption', color: 'rgba(255,255,255,0.5)' }}
+                                                    />
+                                                    {isOpen ? <ExpandLess fontSize="small" sx={{ color: 'rgba(255,255,255,0.3)' }} /> : <ExpandMore fontSize="small" sx={{ color: 'rgba(255,255,255,0.3)' }} />}
+                                                </ListItemButton>
+                                                
+                                                <Collapse in={isOpen} timeout="auto" unmountOnExit>
+                                                    <List disablePadding sx={{ bgcolor: 'rgba(0,0,0,0.1)', mb: 1, borderRadius: 1 }}>
+                                                        {files.map((node: any) => (
+                                                            <ListItemButton 
+                                                                key={node.filepath} 
+                                                                sx={{ pl: 4, py: 0.5, minHeight: 0 }}
+                                                                onClick={() => graphDisplayRef.current?.selectNode(node.filepath)}
+                                                            >
+                                                                <ListItemIcon sx={{ minWidth: 24 }}>
+                                                                    <FileIcon sx={{ fontSize: 16, color: 'rgba(255,255,255,0.3)' }} />
+                                                                </ListItemIcon>
+                                                                <ListItemText 
+                                                                    primary={node.filepath} 
+                                                                    primaryTypographyProps={{ 
+                                                                        variant: 'caption', 
+                                                                        color: 'rgba(255,255,255,0.7)', 
+                                                                        sx: { wordBreak: 'break-all' } 
+                                                                    }} 
+                                                                />
+                                                            </ListItemButton>
+                                                        ))}
+                                                    </List>
+                                                </Collapse>
+                                            </React.Fragment>
                                         );
                                     })}
                                 </List>
                             </Box>
                         </Collapse>
                     </Box>
+                    )}
 
                     {/* NEW: Categories Section */}
                     {displayGraph && (
@@ -927,9 +970,9 @@ const Results: React.FC = () => {
             ) : (
                 // Collapsed State Icons
                 <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, pt: 3 }}>
-                    <Tooltip title="Repository Insights" placement="right">
+                    <Tooltip title="Repository" placement="right">
                         <IconButton 
-                            onClick={() => handleSectionToggle('insights')}
+                            onClick={() => handleSectionToggle('repository')}
                             sx={{ color: '#79c0ff', '&:hover': { bgcolor: 'rgba(121, 192, 255, 0.1)' } }}
                         >
                             <PlayArrowIcon />
