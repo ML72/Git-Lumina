@@ -105,7 +105,7 @@ const Results: React.FC = () => {
   const [webcamEnabled, setWebcamEnabled] = useState(true);
   const [permissionDenied, setPermissionDenied] = useState(false);
   const [autoRotateEnabled, setAutoRotateEnabled] = useState(true);
-  const [clickEnabled, setClickEnabled] = useState(true);
+  const [clickEnabled] = useState(false);
   const [activeHandCount, setActiveHandCount] = useState(0);
   const [gestureMode, setGestureMode] = useState<'idle' | 'left-hand-rotate' | 'right-hand-pan' | 'two-hand-zoom'>('idle');
   
@@ -1113,7 +1113,7 @@ const Results: React.FC = () => {
               </Typography>
               <Switch
                 disabled={permissionDenied}
-                checked={webcamEnabled}
+                                                                                                                                                                                                                                                                                                checked={webcamEnabled}
                 onChange={(e) => setWebcamEnabled(e.target.checked)}
                 size="small"
                 sx={{
@@ -1161,39 +1161,6 @@ const Results: React.FC = () => {
                   },
                   '& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track': {
                     backgroundColor: 'rgba(78, 205, 196, 0.5)',
-                  }
-                }}
-              />
-            </Box>
-            
-            {/* Pinch Click Toggle */}
-            <Box
-              sx={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 1,
-                bgcolor: 'rgba(22, 27, 34, 0.9)',
-                backdropFilter: 'blur(4px)',
-                px: 1.5,
-                py: 0.75,
-                borderRadius: 2,
-                border: `1px solid ${clickEnabled ? 'rgba(255, 193, 7, 0.5)' : 'rgba(255,255,255,0.1)'}`,
-                boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
-              }}
-            >
-              <Typography variant="caption" sx={{ fontWeight: 600, color: '#d0d7de', minWidth: 100 }}>
-                Pinch Click
-              </Typography>
-              <Switch
-                checked={clickEnabled}
-                onChange={(e) => setClickEnabled(e.target.checked)}
-                size="small"
-                sx={{
-                  '& .MuiSwitch-switchBase.Mui-checked': {
-                    color: '#FFC107',
-                  },
-                  '& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track': {
-                    backgroundColor: 'rgba(255, 193, 7, 0.5)',
                   }
                 }}
               />
