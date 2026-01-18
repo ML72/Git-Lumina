@@ -51,6 +51,9 @@ import GraphDisplay, { GraphDisplayRef } from '../components/GraphDisplay';
 import Webcam, { GestureState } from '../components/Webcam';
 import useGestureControls, { GestureControlState } from '../hooks/useGestureControls';
 import { selectGraph } from '../store/slices/graph';
+import { selectOpenAiKey } from '../store/slices/api';
+import { CodebaseGraph } from '../types/CodebaseGraph';
+import { generateQuests } from '../utils/openaiQuests';
 
 const CATEGORY_COLORS = [
     '#FF6B6B', '#4ECDC4', '#45B7D1', '#FFA07A', '#98D8C8',
@@ -76,6 +79,7 @@ const Results: React.FC = () => {
   const theme = useTheme();
   const location = useLocation();
   const graph = useSelector(selectGraph);
+  const apiKey = useSelector(selectOpenAiKey);
   const [query, setQuery] = useState('');
   const [webcamEnabled, setWebcamEnabled] = useState(true);
   const [webcamVisible, setWebcamVisible] = useState(true);
@@ -129,11 +133,30 @@ const Results: React.FC = () => {
   
   // Quest data and state
   const [quests, setQuests] = useState([
-    { id: 1, title: 'Understand Entry Point', description: 'Find where the app starts', completed: false },
-    { id: 2, title: 'Explore Components', description: 'Review the component structure', completed: false },
-    { id: 3, title: 'Check State Management', description: 'Understand how data flows', completed: false },
+    { id: 1, title: 'The Origin', description: 'Where it all begins', completed: false },
+    { id: 2, title: 'The Protagonist', description: 'The main logic', completed: false },
+    { id: 3, title: 'The World', description: 'The context', completed: false },
   ]);
   const [activeQuestId, setActiveQuestId] = useState<number | null>(1);
+
+  // Update quests based on repository analysis
+  useEffect(() => {
+    const activeGraph = (graph || largeGraph) as CodebaseGraph;
+    if (!activeGraph?.nodes?.length || !apiKey) return;
+
+    generateQuests(activeGraph.nodes, apiKey)
+      .then(newQuests => {
+        if (newQuests && newQuests.length > 0) {
+          setQuests(newQuests.map(q => ({
+            id: q.id,
+            title: q.title,
+            description: q.description,
+            completed: q.completed
+          })));
+        }
+      })
+      .catch(console.error);
+  }, [graph, largeGraph, apiKey]);
   
   const toggleQuestCompletion = (questId: number) => {
     setQuests(prev => prev.map(q => 
