@@ -19,7 +19,8 @@ import {
   SelectChangeEvent,
   alpha,
   useTheme,
-  useMediaQuery
+  useMediaQuery,
+  CircularProgress
 } from '@mui/material';
 import { 
   CloudUpload as CloudUploadIcon, 
@@ -34,35 +35,142 @@ import {
   Speed as SpeedIcon,
   Code as CodeIcon
 } from '@mui/icons-material';
+import { useDispatch } from 'react-redux';
+import { useNavigate } from 'react-router-dom';
+import { setOpenAiKey } from '../store/slices/api';
+import { setNewAlert } from '../service/alert';
+import { generateAndStoreGraph } from '../service/codebase';
 import CustomPage from '../components/CustomPage';
 
 const Landing: React.FC = () => {
-  const [apiKey, setApiKey] = useState('');
+  const [apiKey, setApiKeyInput] = useState('');
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [fileName, setFileName] = useState<string | null>(null);
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
+  const dispatch = useDispatch();
+  const navigate = useNavigate();
   
   // Advanced settings state
   const [is3D, setIs3D] = useState(false);
   const [includeTests, setIncludeTests] = useState(false);
   const [fileExtensions, setFileExtensions] = useState('ts,tsx,js,jsx,py,java,cpp,h');
 
+  // New state for GitHub integration
+  const [uploadMode, setUploadMode] = useState<'upload' | 'github'>('upload');
+  const [githubUrl, setGithubUrl] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
 
   const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files && event.target.files[0];
     if (file) {
       setFileName(file.name);
+      setSelectedFile(file);
     }
   };
 
-  const handleStartAnalysis = () => {
-    console.log('Starting analysis with:', {
-      source: fileName,
-      apiKey,
-      settings: { is3D, includeTests, fileExtensions }
-    });
-    // Add logic to dispatch action or navigate
+  const downloadGithubRepo = async (repoUrl: string): Promise<File> => {
+    // Normalize URL to remove .git or trailing slashes
+    let cleanUrl = repoUrl.replace(/\/$/, '').replace(/\.git$/, '');
+    
+    // Define potential download URLs
+    const targets = [
+        `${cleanUrl}/archive/refs/heads/main.zip`,
+        `${cleanUrl}/archive/refs/heads/master.zip`
+    ];
+
+    let lastError;
+
+    for (const targetUrl of targets) {
+        // Try multiple proxies
+        const proxies = [
+             `https://corsproxy.io/?${encodeURIComponent(targetUrl)}`,
+             `https://api.allorigins.win/raw?url=${encodeURIComponent(targetUrl)}`
+        ];
+
+        for (const proxyUrl of proxies) {
+            try {
+                console.log(`Attempting to fetch ${targetUrl} via proxy...`);
+                const response = await fetch(proxyUrl);
+                
+                if (!response.ok) {
+                    console.warn(`Failed to fetch ${targetUrl} via proxy: ${response.status}`);
+                    continue; // Try next proxy
+                }
+                
+                const blob = await response.blob();
+                
+                // Validate blob size - error pages are usually small HTML
+                if (blob.size < 500) {
+                     throw new Error("Response too small, likely an error page.");
+                }
+
+                return new File([blob], "repository.zip", { type: 'application/zip' });
+            } catch (err) {
+                console.warn(`Download failed for ${targetUrl}:`, err);
+                lastError = err;
+            }
+        }
+    }
+
+    throw new Error('Failed to download repository. Please check if the repository is public and the URL is correct.');
+  };
+
+  const handleStartAnalysis = async () => {
+    // 1. Validation
+    if (!apiKey) {
+      setNewAlert(dispatch, { msg: "Please enter your OpenAI API Key", alertType: "error" });
+      return;
+    }
+
+    if (uploadMode === 'github' && !githubUrl) {
+      setNewAlert(dispatch, { msg: "Please enter a valid GitHub repository URL", alertType: "error" });
+      return;
+    }
+
+    if (uploadMode === 'upload' && !selectedFile) {
+      setNewAlert(dispatch, { msg: "Please upload a ZIP file of your codebase", alertType: "error" });
+      return;
+    }
+
+    setIsLoading(true);
+    
+    try {
+        let fileToProcess = selectedFile;
+
+        // 2. Download if GitHub
+        if (uploadMode === 'github') {
+            try {
+                // Pass the base URL directly
+                fileToProcess = await downloadGithubRepo(githubUrl);
+                setNewAlert(dispatch, { msg: "Repository downloaded successfully!", alertType: "success" });
+                setFileName(fileToProcess.name);
+                setSelectedFile(fileToProcess);
+            } catch (error: any) {
+                console.error(error);
+                setNewAlert(dispatch, { msg: error.message || 'Failed to download GitHub repository, please use a zip file instead', alertType: "error" });
+                setIsLoading(false);
+                return;
+            }
+        }
+
+        // 3. Update Redux State
+        dispatch(setOpenAiKey(apiKey));
+
+        // 4. Generate Graph & Store & Navigate
+        if (fileToProcess) {
+             await generateAndStoreGraph(fileToProcess, dispatch, navigate);
+             // generateAndStoreGraph handles dispatching setGraph, setName and navigating
+             // It also handles errors for graph generation
+        }
+
+    } catch (error: any) {
+        console.error(error);
+        setNewAlert(dispatch, { msg: error.message || "An unexpected error occurred", alertType: "error" });
+    } finally {
+        setIsLoading(false);
+    }
   };
 
   // Feature card component
@@ -266,7 +374,30 @@ const Landing: React.FC = () => {
               <Box sx={{ p: 4 }}>
                 <Stack spacing={3}>
                   
+                  {/* Input Method Selector */}
+                  <FormControl fullWidth>
+                    <InputLabel id="input-method-label" sx={{ color: '#8b949e' }}>Source</InputLabel>
+                    <Select
+                      labelId="input-method-label"
+                      value={uploadMode}
+                      label="Source"
+                      onChange={(e) => setUploadMode(e.target.value as 'upload' | 'github')}
+                      sx={{
+                        color: '#fff',
+                        mb: 3,
+                        '& .MuiOutlinedInput-notchedOutline': { borderColor: '#30363d' },
+                        '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: '#8b949e' },
+                        '&.Mui-focused .MuiOutlinedInput-notchedOutline': { borderColor: '#a371f7' },
+                        '& .MuiSvgIcon-root': { color: '#8b949e' }
+                      }}
+                    >
+                      <MenuItem value="upload">Upload Zip File</MenuItem>
+                      <MenuItem value="github">GitHub Repository</MenuItem>
+                    </Select>
+                  </FormControl>
+
                   {/* File Upload Input */}
+                  {uploadMode === 'upload' ? (
                   <Box 
                       sx={{ 
                         border: '2px dashed',
@@ -307,6 +438,35 @@ const Landing: React.FC = () => {
                         />
                       )}
                     </Box>
+                  ) : (
+                    <Box sx={{ mb: 0 }}>
+                       <TextField
+                          fullWidth
+                          placeholder="https://github.com/username/repo"
+                          variant="outlined"
+                          value={githubUrl}
+                          onChange={(e) => setGithubUrl(e.target.value)}
+                          InputProps={{
+                            startAdornment: (
+                              <InputAdornment position="start">
+                                <GitHubIcon sx={{ color: '#8b949e' }} />
+                              </InputAdornment>
+                            ),
+                            sx: {
+                              bgcolor: '#0d1117',
+                              borderRadius: 2,
+                              '& fieldset': { borderColor: '#30363d' },
+                              '&:hover fieldset': { borderColor: '#8b949e' },
+                              '&.Mui-focused fieldset': { borderColor: '#a371f7' },
+                              input: { color: '#fff' }
+                            }
+                          }}
+                       />
+                       <Typography variant="caption" sx={{ mt: 1, display: 'block', color: '#8b949e' }}>
+                          Enter the repository URL. We'll fetch the main branch.
+                       </Typography>
+                    </Box>
+                  )}
 
                   <Box>
                     <Typography variant="caption" sx={{ mb: 1, color: '#d0d7de', display: 'block', fontWeight: 600 }}>
@@ -318,7 +478,7 @@ const Landing: React.FC = () => {
                       type="password"
                       variant="outlined" 
                       value={apiKey}
-                      onChange={(e) => setApiKey(e.target.value)}
+                      onChange={(e) => setApiKeyInput(e.target.value)}
                       InputProps={{
                         startAdornment: (
                           <InputAdornment position="start">
@@ -420,7 +580,7 @@ const Landing: React.FC = () => {
                     size="large" 
                     fullWidth
                     onClick={handleStartAnalysis}
-                    disabled={!apiKey}
+                    disabled={!apiKey || isLoading}
                     sx={{ 
                       py: 1.5, 
                       borderRadius: 2, 
@@ -440,7 +600,7 @@ const Landing: React.FC = () => {
                       }
                     }}
                   >
-                    Analyze Codebase
+                    {isLoading ? <CircularProgress size={24} color="inherit" /> : "Analyze Codebase"}
                   </Button>
                 </Stack>
               </Box>
