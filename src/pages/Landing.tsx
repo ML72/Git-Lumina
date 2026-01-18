@@ -146,7 +146,6 @@ const Landing: React.FC = () => {
             try {
                 // Pass the base URL directly
                 fileToProcess = await downloadGithubRepo(githubUrl);
-                setNewAlert(dispatch, { msg: "Repository downloaded successfully!", alertType: "success" });
                 setFileName(fileToProcess.name);
                 setSelectedFile(fileToProcess);
             } catch (error: any) {
