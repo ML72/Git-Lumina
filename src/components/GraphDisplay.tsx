@@ -16,6 +16,7 @@ export interface GraphDisplayRef {
     applyGestureControl: (control: GestureControlState) => void;
     resetView: () => void;
     focusNodes: (nodeIds: string[]) => void;
+    setCameraMode: (mode: 'rotate' | 'orbit' | 'pan') => void;
 }
 
 interface GraphDisplayProps {
@@ -30,6 +31,9 @@ const GraphDisplay = forwardRef<GraphDisplayRef, GraphDisplayProps>(({ cursors, 
     const graphData = graph || reduxGraph; // Use prop if provided, otherwise use Redux
     const graphRef = useRef<GraphCanvasRef | null>(null);
     const containerRef = useRef<HTMLDivElement>(null);
+    
+    // Camera mode state - can be changed dynamically
+    const [cameraMode, setCameraMode] = useState<'rotate' | 'orbit' | 'pan'>('rotate');
     
     // State for modal
     const [selectedNodeData, setSelectedNodeData] = useState<any | null>(null);
@@ -203,8 +207,9 @@ const GraphDisplay = forwardRef<GraphDisplayRef, GraphDisplayProps>(({ cursors, 
     useImperativeHandle(ref, () => ({
         applyGestureControl,
         resetView,
-        focusNodes
-    }), [applyGestureControl, resetView, focusNodes]);
+        focusNodes,
+        setCameraMode
+    }), [applyGestureControl, resetView, focusNodes, cameraMode]);
 
     useEffect(() => {
         if (graphRef.current && nodes.length > 0) {
@@ -322,7 +327,7 @@ const GraphDisplay = forwardRef<GraphDisplayRef, GraphDisplayProps>(({ cursors, 
                 theme={theme.palette.mode === 'dark' ? darkTheme : lightTheme}
                 draggable
                 animated={!isGestureActive} // Pause animation when user is controlling with gestures
-                cameraMode="rotate"
+                cameraMode={cameraMode}
                 onNodeClick={handleNodeClick}
                 layoutOverrides={{
                     nodeStrength: -1000,
