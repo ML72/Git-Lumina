@@ -15,6 +15,7 @@ import { CodebaseGraph } from '../types/CodebaseGraph';
 export interface GraphDisplayRef {
     applyGestureControl: (control: GestureControlState) => void;
     resetView: () => void;
+    focusNodes: (nodeIds: string[]) => void;
 }
 
 interface GraphDisplayProps {
@@ -164,12 +165,46 @@ const GraphDisplay = forwardRef<GraphDisplayRef, GraphDisplayProps>(({ cursors, 
             zoom: 1
         };
     }, []);
+
+    const focusNodes = useCallback((nodeIdsOrFilepaths: string[]) => {
+        if (graphRef.current && nodeIdsOrFilepaths.length > 0) {
+            // Check if input looks like filepaths and map to internal IDs if needed
+            // The nodes use index as ID, but label is filepath
+            // Helper to clean paths for comparison (remove 'root/' prefix, ignore leading slashes)
+            const cleanPath = (p: string) => p.replace(/^root[\/\\]/, '').replace(/^[\\\/]+/, '').toLowerCase();
+            
+            const targetIds = nodes
+                .filter(n => {
+                    // Direct ID match
+                    if (nodeIdsOrFilepaths.includes(n.id)) return true;
+                    // Label/Filepath match
+                    if (n.label) {
+                        const nodePath = cleanPath(n.label);
+                        return nodeIdsOrFilepaths.some(searchPath => {
+                            const search = cleanPath(searchPath);
+                            // Match if one ends with the other (handles relative paths)
+                            return nodePath.endsWith(search) || search.endsWith(nodePath);
+                        });
+                    }
+                    return false;
+                })
+                .map(n => n.id);
+                
+            if (targetIds.length > 0) {
+                console.log(`[GraphDisplay] Focusing on nodes: ${targetIds.join(', ')}`);
+                graphRef.current.fitNodesInView(targetIds);
+            } else {
+                console.warn('[GraphDisplay] focusNodes: No matching nodes found for', nodeIdsOrFilepaths);
+            }
+        }
+    }, [nodes]);
     
     // Expose methods to parent
     useImperativeHandle(ref, () => ({
         applyGestureControl,
-        resetView
-    }), [applyGestureControl, resetView]);
+        resetView,
+        focusNodes
+    }), [applyGestureControl, resetView, focusNodes]);
 
     useEffect(() => {
         if (graphRef.current && nodes.length > 0) {

@@ -43,7 +43,8 @@ import {
   School as SchoolIcon,
   CheckCircle as CheckCircleIcon,
   RadioButtonUnchecked as UncheckedIcon,
-  Lightbulb as LightbulbIcon
+  Lightbulb as LightbulbIcon,
+  Close as CloseIcon
 } from '@mui/icons-material';
 import { useLocation } from 'react-router-dom';
 import CustomPage from '../components/CustomPage';
@@ -173,27 +174,47 @@ const Results: React.FC = () => {
   }, [graph]);
 
   // Quest data and state
-  const [quests, setQuests] = useState([
-    { id: 1, title: 'The Origin', description: 'Where it all begins', completed: false },
-    { id: 2, title: 'The Protagonist', description: 'The main logic', completed: false },
-    { id: 3, title: 'The World', description: 'The context', completed: false },
+  interface QuestState {
+      id: number;
+      title: string;
+      description: string;
+      completed: boolean;
+      relevantNodes: string[];
+      hint: string;
+  }
+
+  const [quests, setQuests] = useState<QuestState[]>([
+    { id: 1, title: 'The Origin', description: 'Where it all begins', completed: false, relevantNodes: [], hint: 'Check the root files.' },
+    { id: 2, title: 'The Protagonist', description: 'The main logic', completed: false, relevantNodes: [], hint: 'Look for App.tsx.' },
+    { id: 3, title: 'The World', description: 'The context', completed: false, relevantNodes: [], hint: 'Review helper functions.' },
   ]);
   const [activeQuestId, setActiveQuestId] = useState<number | null>(1);
+  const [activeHint, setActiveHint] = useState<string | null>(null);
 
   // Update quests based on repository analysis
   useEffect(() => {
     const activeGraph = (graph || largeGraph) as CodebaseGraph;
     if (!activeGraph?.nodes?.length || !apiKey) return;
 
+    // Avoid regenerating if we already have quests and the graph hasn't changed (simplified check)
+    // For now, we'll just merge state to preserve completion status
     generateQuests(activeGraph.nodes, apiKey)
       .then(newQuests => {
         if (newQuests && newQuests.length > 0) {
-          setQuests(newQuests.map(q => ({
-            id: q.id,
-            title: q.title,
-            description: q.description,
-            completed: q.completed
-          })));
+          setQuests(prev => {
+            // Merge new quests with existing state to preserve 'completed' status
+            return newQuests.map(q => {
+              const existing = prev.find(p => p.id === q.id);
+              return {
+                id: q.id,
+                title: q.title,
+                description: q.description,
+                completed: existing ? existing.completed : q.completed,
+                relevantNodes: q.relevantNodes,
+                hint: q.hint
+              };
+            });
+          });
         }
       })
       .catch(console.error);
@@ -203,6 +224,25 @@ const Results: React.FC = () => {
     setQuests(prev => prev.map(q => 
       q.id === questId ? { ...q, completed: !q.completed } : q
     ));
+  };
+
+  const handleQuestClick = (quest: QuestState) => {
+      setActiveQuestId(quest.id);
+      
+      // Mark as completed if not already
+      if (!quest.completed) {
+          toggleQuestCompletion(quest.id);
+      }
+      
+      // Fly to nodes
+      if (quest.relevantNodes && quest.relevantNodes.length > 0 && graphDisplayRef.current) {
+          graphDisplayRef.current.focusNodes(quest.relevantNodes);
+      }
+      
+      // Show hint
+      if (quest.hint) {
+          setActiveHint(quest.hint);
+      }
   };
   
   // Suggested questions for Cortex
@@ -355,10 +395,12 @@ const Results: React.FC = () => {
                     flex: 1, 
                     display: 'flex', 
                     flexDirection: 'column', 
-                    overflowY: 'hidden',
+                    overflowY: 'auto',
                     minWidth: sidebarWidth, 
                     position: 'relative',
                     zIndex: 1,
+                    '&::-webkit-scrollbar': { display: 'none' },
+                    scrollbarWidth: 'none',
                 }}>
                     
                     {/* 2. Repository Insight Section */}
@@ -572,7 +614,7 @@ const Results: React.FC = () => {
                             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                                 <SchoolIcon fontSize="small" sx={{ color: activeSection === 'quests' ? '#79c0ff' : 'rgba(255,255,255,0.5)' }} />
                                 <Typography variant="subtitle2" fontWeight="bold" sx={{ color: activeSection === 'quests' ? '#79c0ff' : 'rgba(255,255,255,0.7)', letterSpacing: '0.5px' }}>
-                                    LEARNING QUESTS
+                                    QUESTS
                                 </Typography>
                             </Box>
                             {activeSection === 'quests' ? <ExpandLess fontSize="small" sx={{ color: 'rgba(255,255,255,0.5)' }} /> : <ExpandMore fontSize="small" sx={{ color: 'rgba(255,255,255,0.5)' }} />}
@@ -581,7 +623,7 @@ const Results: React.FC = () => {
                         <Collapse in={activeSection === 'quests'}>
                             <Box sx={{ px: 2, pb: 2 }}>
                                 <Typography variant="caption" paragraph sx={{ whiteSpace: 'normal', display: 'block', color: 'rgba(255,255,255,0.5)' }}>
-                                    Follow the path to understand the architecture.
+                                    Follow these steps to get started with the codebase.
                                 </Typography>
                                 
                                 <List disablePadding>
@@ -607,10 +649,7 @@ const Results: React.FC = () => {
                                                     bgcolor: 'rgba(255,255,255,0.05)' 
                                                 }
                                             }}
-                                            onClick={() => {
-                                                toggleQuestCompletion(quest.id);
-                                                setActiveQuestId(quest.id);
-                                            }}
+                                            onClick={() => handleQuestClick(quest)}
                                         >
                                             <IconButton 
                                                 size="small" 
@@ -769,7 +808,7 @@ const Results: React.FC = () => {
                             <PlayArrowIcon />
                         </IconButton>
                     </Tooltip>
-                    <Tooltip title="Learning Quests" placement="right">
+                    <Tooltip title="Quests" placement="right">
                         <IconButton 
                             onClick={() => handleSectionToggle('quests')}
                             sx={{ color: '#79c0ff', '&:hover': { bgcolor: 'rgba(121, 192, 255, 0.1)' } }}
@@ -795,6 +834,42 @@ const Results: React.FC = () => {
             ref={graphDisplayRef}
             isGestureActive={webcamEnabled && activeHandCount > 0}
           />
+          
+          {/* Quest Hint Popup */}
+          {activeHint && (
+             <Paper sx={{
+                 position: 'absolute',
+                 top: 20,
+                 right: 20,
+                 maxWidth: 300,
+                 p: 2,
+                 bgcolor: 'rgba(13, 17, 23, 0.9)',
+                 backdropFilter: 'blur(10px)',
+                 border: '1px solid #a371f7',
+                 boxShadow: '0 0 20px rgba(163, 113, 247, 0.2)',
+                 zIndex: 110,
+                 animation: 'fadeIn 0.3s ease-in-out',
+                 '@keyframes fadeIn': {
+                    '0%': { opacity: 0, transform: 'translateY(-10px)' },
+                    '100%': { opacity: 1, transform: 'translateY(0)' }
+                 }
+             }}>
+                <Stack direction="row" spacing={1} alignItems="flex-start">
+                    <LightbulbIcon sx={{ color: '#FFD700' }} />
+                    <Box sx={{ flex: 1 }}>
+                        <Typography variant="subtitle2" fontWeight="bold" color="#fff" gutterBottom>
+                            Quest Insight
+                        </Typography>
+                        <Typography variant="body2" color="rgba(255,255,255,0.8)">
+                            {activeHint}
+                        </Typography>
+                    </Box>
+                    <IconButton size="small" onClick={() => setActiveHint(null)} sx={{ color: 'rgba(255,255,255,0.5)', mt: -0.5, mr: -0.5 }}>
+                        <CloseIcon fontSize="small" />
+                    </IconButton>
+                </Stack>
+             </Paper>
+          )}
           
           {/* Webcam Preview (Picture-in-Picture style) - Always visible in bottom right */}
           <Collapse in={webcamVisible}>
