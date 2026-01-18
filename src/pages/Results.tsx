@@ -583,7 +583,9 @@ const Results: React.FC = () => {
 
             {/* Content Container - Hide if collapsed */}
             {isSidebarOpen ? (
-                <Box sx={{ 
+                <Box 
+                    className="sidebar-content"
+                    sx={{ 
                     flex: 1, 
                     display: 'flex', 
                     flexDirection: 'column', 
@@ -591,8 +593,6 @@ const Results: React.FC = () => {
                     minWidth: sidebarWidth, 
                     position: 'relative',
                     zIndex: 1,
-                    '&::-webkit-scrollbar': { display: 'none' },
-                    scrollbarWidth: 'none',
                 }}>
                     
                     {/* 2. Repository Section */}
@@ -908,12 +908,11 @@ const Results: React.FC = () => {
                                 {/* Messages Area */}
                                 <Box 
                                     ref={messagesContainerRef}
+                                    className="sidebar-content"
                                     sx={{ 
                                     flex: 1, 
                                     overflowY: 'auto', 
                                     p: 2,
-                                    '&::-webkit-scrollbar': { display: 'none' },
-                                    scrollbarWidth: 'none'
                                 }}>
                                     {chat.map((msg) => (
                                         <Box key={msg.id} sx={{ mb: 2, display: 'flex', gap: 1.5, flexDirection: msg.sender === 'user' ? 'row-reverse' : 'row' }}>
