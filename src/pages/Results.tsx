@@ -8,10 +8,7 @@ import {
   ListItem, 
   ListItemText, 
   Divider, 
-  TextField, 
-  InputAdornment, 
   IconButton, 
-  Chip,
   Stack,
   Avatar,
   useTheme,
@@ -24,9 +21,7 @@ import {
   Switch
 } from '@mui/material';
 import { 
-  Send as SendIcon, 
   SmartToy as BotIcon, 
-  Person as PersonIcon,
   Description as FileIcon, 
   Code as CodeIcon,
   Info as InfoIcon,
@@ -82,10 +77,8 @@ const LANGUAGE_DISPLAY_NAMES: Record<string, string> = {
     'Other': 'Other'
 };
 
-// Mock Data
-const MOCK_CHAT = [
-  { id: 1, sender: 'system', text: 'Hello! I am Cortex, acts as your AI assistant for this codebase. Ask me anything about the structure, dependencies, or specific files.' },
-];
+// Mock Data removed
+
 
 const Results: React.FC = () => {
   const theme = useTheme();
@@ -93,7 +86,6 @@ const Results: React.FC = () => {
   const graph = useSelector(selectGraph);
   const repoName = useSelector(selectName);
   const apiKey = useSelector(selectOpenAiKey);
-  const [query, setQuery] = useState('');
   const [webcamEnabled, setWebcamEnabled] = useState(true);
   const [autoRotateEnabled, setAutoRotateEnabled] = useState(true);
   const [activeHandCount, setActiveHandCount] = useState(0);
@@ -125,25 +117,13 @@ const Results: React.FC = () => {
   const graphDisplayRef = useRef<GraphDisplayRef>(null);
   const graphContainerRef = useRef<HTMLDivElement>(null);
   const { processGesture } = useGestureControls();
-  const [chat, setChat] = useState(MOCK_CHAT);
   
   // Try to retrieve large graph from navigation state if available
   const largeGraph = location.state?.largeGraph;
   
   // MERGED GRAPH SOURCE: Use largeGraph if passed via navigation, or graph from Redux
   const displayGraph = (largeGraph || graph) as CodebaseGraph | null;
-  
-  const messagesContainerRef = useRef<HTMLDivElement>(null);
 
-  const scrollToBottom = () => {
-    if (messagesContainerRef.current) {
-      messagesContainerRef.current.scrollTop = messagesContainerRef.current.scrollHeight;
-    }
-  };
-
-  useEffect(() => {
-    scrollToBottom();
-  }, [chat]);
 
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [sidebarWidth, setSidebarWidth] = useState(320);
@@ -296,13 +276,6 @@ const Results: React.FC = () => {
           setActiveHint(quest.hint);
       }
   };
-  
-  // Suggested questions for Cortex
-  const SUGGESTED_QUESTIONS = [
-    'How does auth work?',
-    'Explain the data flow',
-    'What are the main components?'
-  ];
   
   // Keep refs in sync with state
   useEffect(() => {
@@ -481,16 +454,7 @@ const Results: React.FC = () => {
     setWebcamEnabled(false);
   }, []);
 
-  const handleSuggestedQuestion = (text: string) => {
-    setChat(prev => [...prev, { id: Date.now(), sender: 'user', text }]);
-    // Simulate response for better UX
-    setTimeout(() => {
-        setChat(prev => [...prev, { id: Date.now() + 1, sender: 'system', text: `Analyzing ${text.toLowerCase()}... (Simulation)` }]);
-    }, 800);
-    setQuery('');
-  };
-
-  const handleSectionToggle = (section: 'repository' | 'quests' | 'cortex' | 'categories') => {
+  const handleSectionToggle = (section: 'repository' | 'quests' | 'categories') => {
       // Dismiss hints when toggling sections
       setActiveHint(null);
 
@@ -840,9 +804,30 @@ const Results: React.FC = () => {
                         
                         <Collapse in={activeSection === 'quests'}>
                             <Box sx={{ px: 2, pb: 2 }}>
-                                <Typography variant="caption" paragraph sx={{ whiteSpace: 'normal', display: 'block', color: 'rgba(255,255,255,0.5)' }}>
-                                    Follow these steps to get started with the codebase.
-                                </Typography>
+                                {/* Cortex Buddy Introduction */}
+                                <Box sx={{ mb: 3, display: 'flex', gap: 1.5 }}>
+                                    <Avatar sx={{ width: 40, height: 40, bgcolor: 'rgba(163, 113, 247, 0.2)', border: '1px solid rgba(163, 113, 247, 0.3)' }}>
+                                        <BotIcon sx={{ color: '#a371f7', fontSize: 24 }} />
+                                    </Avatar>
+                                    
+                                    <Box sx={{ position: 'relative', flex: 1 }}>
+                                        <Paper sx={{ 
+                                            p: 2, 
+                                            bgcolor: 'rgba(163, 113, 247, 0.1)', 
+                                            border: '1px solid rgba(163, 113, 247, 0.2)', 
+                                            borderRadius: '16px',
+                                            borderTopLeftRadius: 4,
+                                            position: 'relative'
+                                        }}>
+                                            <Typography variant="subtitle2" fontWeight="bold" sx={{ color: '#a371f7', mb: 0.5, fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                                                Cortex
+                                            </Typography>
+                                            <Typography variant="body2" sx={{ color: 'rgba(255,255,255,0.9)', lineHeight: 1.6 }}>
+                                                Hi, I'm Cortex, your learning buddy. Follow these steps to get started with your codebase!
+                                            </Typography>
+                                        </Paper>
+                                    </Box>
+                                </Box>
                                 
                                 <List disablePadding>
                                     {quests.map((quest) => (
@@ -895,124 +880,6 @@ const Results: React.FC = () => {
                         </Collapse>
                     </Box>
 
-                    {/* 4. Cortex Interface - Expands to fill */}
-                    <Box sx={{ 
-                        flex: activeSection === 'cortex' ? 1 : 0, 
-                        display: 'flex', 
-                        flexDirection: 'column', 
-                        minHeight: 0, 
-                        transition: 'flex 0.3s'
-                    }}>
-                        <Box 
-                            sx={{ p: 2, display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer', borderBottom: activeSection === 'cortex' ? '1px solid rgba(255,255,255,0.06)' : 'none', '&:hover': { bgcolor: 'rgba(255,255,255,0.03)' } }}
-                             onClick={() => handleSectionToggle('cortex')}
-                        >
-                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                                <BotIcon fontSize="small" sx={{ color: activeSection === 'cortex' ? '#a371f7' : 'rgba(255,255,255,0.5)' }} />
-                                <Typography variant="subtitle2" fontWeight="bold" sx={{ color: activeSection === 'cortex' ? '#a371f7' : 'rgba(255,255,255,0.7)', letterSpacing: '0.5px' }}>
-                                    CORTEX
-                                </Typography>
-                            </Box>
-                             {activeSection === 'cortex' ? <ExpandMore fontSize="small" sx={{ color: 'rgba(255,255,255,0.5)', transform: 'rotate(180deg)' }} /> : <ExpandMore fontSize="small" sx={{ color: 'rgba(255,255,255,0.5)' }} />}
-                        </Box>
-                        
-                        {activeSection === 'cortex' && (
-                            <>
-                                {/* Messages Area */}
-                                <Box 
-                                    ref={messagesContainerRef}
-                                    sx={{ 
-                                    flex: 1, 
-                                    overflowY: 'auto', 
-                                    p: 2,
-                                    '&::-webkit-scrollbar': { display: 'none' },
-                                    scrollbarWidth: 'none'
-                                }}>
-                                    {chat.map((msg) => (
-                                        <Box key={msg.id} sx={{ mb: 2, display: 'flex', gap: 1.5, flexDirection: msg.sender === 'user' ? 'row-reverse' : 'row' }}>
-                                            <Avatar sx={{ width: 32, height: 32, bgcolor: msg.sender === 'user' ? 'rgba(121, 192, 255, 0.2)' : 'rgba(163, 113, 247, 0.2)', border: msg.sender === 'user' ? '1px solid rgba(121, 192, 255, 0.3)' : '1px solid rgba(163, 113, 247, 0.3)' }}>
-                                                {msg.sender === 'user' ? <SchoolIcon sx={{ fontSize: 18, color: '#79c0ff' }} /> : <BotIcon sx={{ fontSize: 18, color: '#a371f7' }} />}
-                                            </Avatar>
-                                            <Paper sx={{ 
-                                                p: 2, 
-                                                bgcolor: msg.sender === 'user' ? 'rgba(121, 192, 255, 0.08)' : 'rgba(22, 27, 34, 0.6)', 
-                                                color: '#d0d7de',
-                                                borderRadius: msg.sender === 'user' ? '16px 4px 16px 16px' : '4px 16px 16px 16px', 
-                                                maxWidth: '85%',
-                                                boxShadow: '0 4px 20px rgba(0,0,0,0.1)',
-                                                border: msg.sender === 'user' ? '1px solid rgba(121, 192, 255, 0.2)' : '1px solid rgba(163, 113, 247, 0.1)',
-                                                backdropFilter: 'blur(4px)'
-                                            }}>
-                                                <Typography variant="body2" sx={{ lineHeight: 1.6, whiteSpace: 'normal', textShadow: '0 1px 2px rgba(0,0,0,0.5)' }}>{msg.text}</Typography>
-                                            </Paper>
-                                        </Box>
-                                    ))}
-                                </Box>
-
-                                {/* Suggested Questions */}
-                                <Box sx={{ px: 2, pb: 2, display: 'flex', flexWrap: 'wrap', gap: 1 }}>
-                                    {SUGGESTED_QUESTIONS.map((q, i) => (
-                                        <Chip 
-                                            key={i} 
-                                            label={q} 
-                                            size="small" 
-                                            onClick={() => handleSuggestedQuestion(q)}
-                                            icon={<LightbulbIcon fontSize="small" style={{ color: '#fff' }} />}
-                                            sx={{ 
-                                                cursor: 'pointer', 
-                                                bgcolor: 'rgba(255,255,255,0.05)',
-                                                color: 'rgba(255,255,255,0.8)',
-                                                fontWeight: 500,
-                                                border: '1px solid rgba(255,255,255,0.1)',
-                                                backdropFilter: 'blur(4px)',
-                                                '&:hover': { bgcolor: 'rgba(255,255,255,0.1)', borderColor: 'rgba(255,255,255,0.2)' }
-                                            }}
-                                        />
-                                    ))}
-                                </Box>
-
-                                {/* Input Area */}
-                                <Box sx={{ p: 2, borderTop: '1px solid rgba(255,255,255,0.1)' }}>
-                                    <TextField
-                                        fullWidth
-                                        size="small"
-                                        placeholder="Ask Cortex..."
-                                        value={query}
-                                        onChange={(e) => setQuery(e.target.value)}
-                                        onKeyPress={(e) => {
-                                            if (e.key === 'Enter' && query.trim()) {
-                                                handleSuggestedQuestion(query);
-                                            }
-                                        }}
-                                        InputProps={{
-                                            endAdornment: (
-                                                <InputAdornment position="end">
-                                                    <IconButton 
-                                                        edge="end" 
-                                                        size="small" 
-                                                        sx={{ color: '#79c0ff', '&:hover': { bgcolor: 'rgba(121, 192, 255, 0.1)' } }}
-                                                        onClick={() => query.trim() && handleSuggestedQuestion(query)}
-                                                    >
-                                                        <SendIcon fontSize="small" />
-                                                    </IconButton>
-                                                </InputAdornment>
-                                            ),
-                                            sx: { 
-                                                borderRadius: 4, 
-                                                fontSize: '0.875rem',
-                                                bgcolor: 'rgba(255,255,255,0.05)',
-                                                color: '#fff',
-                                                '& fieldset': { borderColor: 'rgba(255,255,255,0.1)' },
-                                                '&:hover fieldset': { borderColor: 'rgba(255,255,255,0.2) !important' },
-                                                '&.Mui-focused fieldset': { borderColor: '#79c0ff !important' },
-                                                input: { '&::placeholder': { color: 'rgba(255,255,255,0.4)', opacity: 1 } }
-                                            }
-                                        }}
-                                    />
-                                </Box>
-                            </>
-                        )}
-                    </Box>
 
                 </Box>
             ) : (
@@ -1034,14 +901,6 @@ const Results: React.FC = () => {
                             <SchoolIcon />
                         </IconButton>
                     </Tooltip>
-                    <Tooltip title="Cortex" placement="right">
-                        <IconButton 
-                            onClick={() => handleSectionToggle('cortex')}
-                            sx={{ color: '#a371f7', '&:hover': { bgcolor: 'rgba(163, 113, 247, 0.1)' } }}
-                        >
-                            <BotIcon />
-                        </IconButton>
-                    </Tooltip>
                 </Box>
             )}
         </Paper>
@@ -1054,32 +913,57 @@ const Results: React.FC = () => {
             isGestureActive={webcamEnabled && activeHandCount > 0}
           />
           
-          {/* Quest Hint Popup */}
+          {/* Quest Hint Popup as Speech Bubble */}
           {activeHint && (
-             <Paper sx={{
-                 position: 'absolute',
-                 top: 20,
-                 right: 20,
-                 maxWidth: 300,
-                 p: 2,
-                 bgcolor: 'rgba(13, 17, 23, 0.9)',
-                 backdropFilter: 'blur(10px)',
-                 border: '1px solid #a371f7',
-                 boxShadow: '0 0 20px rgba(163, 113, 247, 0.2)',
-                 zIndex: 110,
-                 animation: 'fadeIn 0.3s ease-in-out',
-                 '@keyframes fadeIn': {
-                    '0%': { opacity: 0, transform: 'translateY(-10px)' },
-                    '100%': { opacity: 1, transform: 'translateY(0)' }
-                 }
-             }}>
-                <Stack direction="row" spacing={1} alignItems="flex-start">
-                    <LightbulbIcon sx={{ color: '#FFD700' }} />
-                    <Box sx={{ flex: 1 }}>
-                        <Typography variant="subtitle2" fontWeight="bold" color="#fff" gutterBottom>
-                            Insight
-                        </Typography>
-                        <Box sx={{ color: 'rgba(255,255,255,0.8)', typography: 'body2' }}>
+            <Box
+                sx={{
+                    position: 'absolute',
+                    top: 20,
+                    right: 20,
+                    maxWidth: 340,
+                    zIndex: 110,
+                    display: 'flex',
+                    flexDirection: 'row-reverse', // Avatar on right
+                    gap: 1.5,
+                    animation: 'fadeIn 0.3s ease-in-out',
+                    '@keyframes fadeIn': {
+                        '0%': { opacity: 0, transform: 'translateY(-10px)' },
+                        '100%': { opacity: 1, transform: 'translateY(0)' }
+                    }
+                }}
+            >
+                <Avatar sx={{ width: 40, height: 40, bgcolor: 'rgba(163, 113, 247, 0.2)', border: '1px solid rgba(163, 113, 247, 0.3)', boxShadow: '0 0 15px rgba(163, 113, 247, 0.3)' }}>
+                    <BotIcon sx={{ color: '#a371f7', fontSize: 24 }} />
+                </Avatar>
+
+                <Box sx={{ position: 'relative', flex: 1 }}>
+                    <Paper sx={{
+                        p: 2,
+                        bgcolor: 'rgba(22, 27, 34, 0.95)',
+                        backdropFilter: 'blur(10px)',
+                        border: '1px solid #a371f7',
+                        borderRadius: '16px',
+                        borderTopRightRadius: 4,
+                        boxShadow: '0 4px 20px rgba(0,0,0,0.4)',
+                        position: 'relative'
+                    }}>
+                        <Stack direction="row" justifyContent="space-between" alignItems="flex-start" sx={{ mb: 1 }}>
+                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                                <LightbulbIcon sx={{ color: '#FFD700', fontSize: 20 }} />
+                                <Typography variant="subtitle2" fontWeight="bold" sx={{ color: '#a371f7' }}>
+                                    Insight
+                                </Typography>
+                            </Box>
+                            <IconButton 
+                                size="small" 
+                                onClick={() => setActiveHint(null)} 
+                                sx={{ color: 'rgba(255,255,255,0.4)', mt: -0.5, mr: -0.5, '&:hover': { color: '#fff', bgcolor: 'rgba(255,255,255,0.1)' } }}
+                            >
+                                <CloseIcon fontSize="small" />
+                            </IconButton>
+                        </Stack>
+                        
+                        <Box sx={{ color: 'rgba(255,255,255,0.9)', typography: 'body2' }}>
                             {activeHint && activeHint.split('\n').filter(l => l.trim().length > 0).map((line, i) => {
                                 const isBullet = line.trim().startsWith('•');
                                 if (isBullet) {
@@ -1099,12 +983,9 @@ const Results: React.FC = () => {
                                 );
                             })}
                         </Box>
-                    </Box>
-                    <IconButton size="small" onClick={() => setActiveHint(null)} sx={{ color: 'rgba(255,255,255,0.5)', mt: -0.5, mr: -0.5 }}>
-                        <CloseIcon fontSize="small" />
-                    </IconButton>
-                </Stack>
-             </Paper>
+                    </Paper>
+                </Box>
+            </Box>
           )}
 
           {/* Hand Cursor Overlays */}
