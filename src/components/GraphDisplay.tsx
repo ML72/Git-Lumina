@@ -75,7 +75,7 @@ const GraphDisplay = forwardRef<GraphDisplayRef, GraphDisplayProps>(({ cursors, 
     const applyGestureControl = useCallback((control: GestureControlState) => {
         if (!graphRef.current) return;
         
-        const { panDelta, zoomDelta, isActive, activeHandCount, mode } = control;
+        const { panDelta, rotateDelta, zoomDelta, isActive, activeHandCount, mode } = control;
         
         frameCountRef.current++;
         
@@ -88,14 +88,26 @@ const GraphDisplay = forwardRef<GraphDisplayRef, GraphDisplayProps>(({ cursors, 
             return;
         }
         
-        // Debug log for two-hand mode
-        if (activeHandCount === 2 || mode === 'two-hand-zoom') {
+        // Debug log for different modes
+        if (mode === 'two-hand-zoom') {
             console.log(`[GraphDisplay] TWO-HAND MODE - zoomDelta: ${zoomDelta.toFixed(4)}, panDelta: (${panDelta.x.toFixed(4)}, ${panDelta.y.toFixed(4)})`);
+        } else if (mode === 'left-hand-rotate') {
+            console.log(`[GraphDisplay] LEFT-HAND ROTATE - rotateDelta: (${rotateDelta.x.toFixed(4)}, ${rotateDelta.y.toFixed(4)})`);
         }
         
         // Temporarily enable controls to apply our programmatic changes
         const wasEnabled = controls.enabled;
         controls.enabled = true;
+        
+        // Apply rotation (left hand only)
+        if (rotateDelta.x !== 0 || rotateDelta.y !== 0) {
+            const rotateSpeed = 3; // Adjust for rotation sensitivity
+            
+            // Rotate the camera around the target
+            // Hand moving right should rotate content right (negative azimuth)
+            // Hand moving down should rotate content down (positive polar)
+            controls.rotate(-rotateDelta.x * rotateSpeed, rotateDelta.y * rotateSpeed, false);
+        }
         
         // Apply panning (truck) - moves camera left/right and up/down
         if (panDelta.x !== 0 || panDelta.y !== 0) {
