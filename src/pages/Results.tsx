@@ -1076,7 +1076,7 @@ const Results: React.FC = () => {
               onGestureUpdate={handleGestureUpdate}
               showVideo={false}
               showOverlay={false}
-              enabled={true}
+              enabled={webcamEnabled}
               onError={handleWebcamError}
             />
           </Box>
